@@ -1,0 +1,47 @@
+# name: test/sql/gdx/read_gdx.test
+# description: Smoke-test gdx_symbols and read_gdx on transport sample
+# group: [gdx]
+
+require duckdb_gdx
+
+statement ok
+PRAGMA threads=1;
+
+query I
+SELECT string_agg(symbol_name || '=' || record_count, ',' ORDER BY symbol_name)
+FROM gdx_symbols('test/data/gdx/transport.gdx')
+WHERE symbol_name IN ('d', 'i', 'j');
+----
+d=6,i=2,j=3
+
+query I
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'i')
+WHERE is_member;
+----
+2
+
+query I
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'j')
+WHERE is_member;
+----
+3
+
+query I
+SELECT SUM(value)::INTEGER
+FROM read_gdx('test/data/gdx/transport.gdx', 'a');
+----
+950
+
+query I
+SELECT SUM(value)::INTEGER
+FROM read_gdx('test/data/gdx/transport.gdx', 'b');
+----
+900
+
+query I
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'd');
+----
+6
