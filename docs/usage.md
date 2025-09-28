@@ -82,6 +82,8 @@ semantics. The original special value codes stay accessible through auxiliary va
   unnecessary coordinates are skipped before materializing vectors.
 - **Remote files** rely on DuckDB's `httpfs` or custom VFS providers. When using WASM, pair `initializeDuckDBGDX` from
   `scripts/wasm/extension_bundle.ts` with header configuration to pass authentication tokens for HTTP range requests.
+  A full JavaScript walkthrough that targets a hosted dataset lives in
+  `examples/js/wasm-read-gdx.js`.
 - **Threading**: the current implementation processes a single stream per table function invocation (`MaxThreads = 1`).
   For highly dimensional symbols, prefer batching work across independent DuckDB queries.
 
