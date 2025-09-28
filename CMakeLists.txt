@@ -6,6 +6,8 @@ set(TARGET_NAME duckdb_gdx)
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
+set(DUCKDB_EXTENSION_DUCKDB_GDX_ADDITIONAL_WASM_EXPORTS "\"_duckdb_gdx_wasm_set_http_header\",\"_duckdb_gdx_wasm_clear_http_headers\"")
+
 project(${TARGET_NAME})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/include)
 
@@ -24,6 +26,10 @@ set(EXTENSION_SOURCES
   src/gdx_handle.cpp
   src/gdx_error.cpp
   src/gdx_symbol_utils.cpp
+  src/gdx_wasm_support.cpp
+  src/gdx_metadata.cpp
+  src/gdx_metadata_cache.cpp
+  src/gdx_preload_pragma.cpp
 )
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
@@ -47,6 +53,11 @@ target_include_directories(${LOADABLE_EXTENSION_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/gdx/src/gdlib
 )
 
+if(EMSCRIPTEN)
+  target_link_options(${EXTENSION_NAME} PRIVATE "-sFETCH=1")
+  target_link_options(${LOADABLE_EXTENSION_NAME} PRIVATE "-sFETCH=1")
+endif()
+
 install(
   TARGETS ${EXTENSION_NAME}
   EXPORT "${DUCKDB_EXPORT_SET}"
@@ -58,3 +69,22 @@ install(
   EXPORT "${DUCKDB_EXPORT_SET}"
   ARCHIVE DESTINATION "${INSTALL_LIB_DIR}"
 )
+
+if(DEFINED ENABLE_UNITTEST_CPP_TESTS AND ENABLE_UNITTEST_CPP_TESTS)
+  set(DUCKDB_GDX_UNITTEST_SOURCES
+      test/unit/gdx/test_gdx_symbol_utils.cpp
+      test/unit/gdx/test_random_access_adapter.cpp)
+
+  add_library_unity(duckdb_gdx_unittest OBJECT ${DUCKDB_GDX_UNITTEST_SOURCES})
+  target_include_directories(duckdb_gdx_unittest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/gdx/generated
+    ${CMAKE_CURRENT_SOURCE_DIR}/gdx/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/catch
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/test/include
+  )
+
+  set(ALL_OBJECT_FILES
+      ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_gdx_unittest>
+      PARENT_SCOPE)
+endif()

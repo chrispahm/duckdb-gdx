@@ -3,6 +3,7 @@
 #include "gdx/gdx_extension.hpp"
 #include "gdx/gdx_read_function.hpp"
 #include "gdx/gdx_symbols_function.hpp"
+#include "gdx/gdx_preload_pragma.hpp"
 
 namespace duckdb {
 
@@ -12,9 +13,10 @@ void RegisterSymbolsTableFunction(ExtensionLoader &loader);
 } // namespace gdx
 
 static void LoadInternal(ExtensionLoader &loader) {
-	loader.SetDescription("DuckDB GDX extension (WIP)");
+	loader.SetDescription("DuckDB GDX extension with table functions for reading GDX files");
 	gdx::RegisterReadTableFunction(loader);
 	gdx::RegisterSymbolsTableFunction(loader);
+	gdx::RegisterPreloadPragma(loader);
 }
 
 void DuckdbGdxExtension::Load(ExtensionLoader &loader) {

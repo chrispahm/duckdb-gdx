@@ -7,6 +7,17 @@ require duckdb_gdx
 statement ok
 PRAGMA threads=1;
 
+statement ok
+PRAGMA gdx_preload('test/data/gdx/transport.gdx', force_reload=true);
+
+statement ok
+PRAGMA gdx_preload('test/data/gdx/transport.gdx', symbol='i');
+
+statement error
+PRAGMA gdx_preload('test/data/gdx/transport.gdx', symbol='missing');
+----
+Symbol 'missing' not found in 'test/data/gdx/transport.gdx'
+
 query I
 SELECT string_agg(symbol_name || '=' || record_count, ',' ORDER BY symbol_name)
 FROM gdx_symbols('test/data/gdx/transport.gdx')
@@ -36,12 +47,80 @@ FROM read_gdx('test/data/gdx/transport.gdx', 'a');
 
 query I
 SELECT SUM(value)::INTEGER
+FROM read_gdx('test/data/gdx/transport.gdx', 'a', value_columns => ['value']);
+----
+950
+
+query I
+SELECT SUM(value)::INTEGER
 FROM read_gdx('test/data/gdx/transport.gdx', 'b');
 ----
 900
 
 query I
 SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'd', value_columns => ['value']);
+----
+6
+
+query I
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'j', value_columns => ['is_member'])
+WHERE is_member;
+----
+3
+
+query I
+SELECT COUNT(*)
 FROM read_gdx('test/data/gdx/transport.gdx', 'd');
 ----
 6
+
+query I
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'd', dimension_filters => map(['i'], ['seattle']));
+----
+3
+
+query I
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'i', dimension_filters => map(['i'], ['seattle']))
+WHERE is_member;
+----
+1
+
+statement error
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'd', dimension_filters => map(['unknown'], ['value']));
+----
+Unknown dimension
+
+statement error
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'missing_symbol');
+----
+Symbol 'missing_symbol' not found in 'test/data/gdx/transport.gdx'
+
+statement error
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/missing.gdx', 'd');
+----
+Unable to open 'test/data/gdx/missing.gdx' for GDX random access: {"exception_type":"IO","exception_message":"Cannot open file \"test/data/gdx/missing.gdx\": No such file or directory","errno":"2"}
+
+query I
+SELECT COUNT(*)
+FROM read_gdx('test/data/gdx/transport.gdx', 'j', value_columns => ['is_member']);
+----
+3
+
+query I
+SELECT SUM(CASE WHEN is_sparse_break THEN 1 ELSE 0 END)::INTEGER
+FROM read_gdx('test/data/gdx/transport.gdx', 'd');
+----
+2
+
+query I
+SELECT SUM(CASE WHEN is_dense_run THEN 1 ELSE 0 END)::INTEGER
+FROM read_gdx('test/data/gdx/transport.gdx', 'd');
+----
+4

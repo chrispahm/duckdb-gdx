@@ -1,0 +1,47 @@
+# DuckDB GDX Extension
+
+The DuckDB GDX extension exposes GAMS `.gdx` data sets through DuckDB table functions. It bundles the native GDX
+runtime and adds a small metadata cache so repeated scans stay fast across CLI, Python, and WASM clients.
+
+## Quick start
+
+```sql
+LOAD 'duckdb_gdx';
+PRAGMA gdx_preload('test/data/gdx/transport.gdx', force_reload=true);
+SELECT symbol_name, symbol_type, record_count
+FROM gdx_symbols('test/data/gdx/transport.gdx');
+
+SELECT *
+FROM read_gdx('test/data/gdx/transport.gdx', 'd')
+LIMIT 5;
+```
+
+The `gdx_symbols` table function lists every symbol together with its GAMS type, dimensionality, and record count. Use
+`read_gdx` to materialize a specific symbol; named parameters let you restrict the exported columns:
+
+```sql
+SELECT SUM(value)
+FROM read_gdx(
+  'test/data/gdx/transport.gdx',
+  'a',
+  value_columns => ['value']
+);
+```
+
+## Building the extension
+
+```sh
+make debug       # or make release
+make test_debug  # runs extension SQL tests and metadata unit tests
+```
+
+The CI workflow mirrors these commands on Linux, macOS, Windows, and the WASM toolchain. Generated binaries land under
+`build/<config>/extension/duckdb_gdx/`.
+
+## Documentation
+
+- [`docs/usage.md`](docs/usage.md) — table function signatures, parameters, and performance hints
+- [`test/sql/gdx/read_gdx.test`](test/sql/gdx/read_gdx.test) — end-to-end regression coverage
+
+For implementation details, see the in-source headers under `src/include/gdx/` and the architecture notes in
+`docs/ARCHITECTURE.md` once authored.

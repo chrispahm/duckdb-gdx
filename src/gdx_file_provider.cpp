@@ -1,5 +1,9 @@
 #include "gdx/gdx_file_provider.hpp"
 
+#ifdef __EMSCRIPTEN__
+#include "gdx/gdx_wasm_support.hpp"
+#endif
+
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/file_open_flags.hpp"
@@ -22,6 +26,14 @@ void GDXFileRandomAccessProvider::Reset() {
 void GDXFileRandomAccessProvider::Initialize(ClientContext &context, const std::string &file_or_url) {
 	Reset();
 	requested_path = file_or_url;
+
+#ifdef __EMSCRIPTEN__
+	if (InitializeWasmRandomAccess(adapter, file_or_url)) {
+		resolved_path = file_or_url;
+		is_remote = true;
+		return;
+	}
+#endif
 
 	auto &fs = FileSystem::GetFileSystem(context);
 	is_remote = FileSystem::IsRemoteFile(file_or_url);

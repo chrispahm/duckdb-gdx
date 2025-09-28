@@ -10,24 +10,68 @@ namespace duckdb {
 namespace gdx {
 namespace {
 
-std::string MakeValueColumnName(int symbol_type) {
-	switch (symbol_type) {
-	case GMS_DT_SET:
-		return "is_member";
-	case GMS_DT_PAR:
-		return "value";
-	case GMS_DT_VAR:
-		return "level";
-	case GMS_DT_EQU:
-		return "level";
-	default:
-		return "value";
-	}
+const std::vector<ValueColumnDefinition> &GetSetValueColumns() {
+	static const std::vector<ValueColumnDefinition> columns = {
+		{"is_member", LogicalType::BOOLEAN, ValueColumnKind::SetMembership}
+	};
+	return columns;
+}
+
+const std::vector<ValueColumnDefinition> &GetParameterValueColumns() {
+	static const std::vector<ValueColumnDefinition> columns = {
+		{"value", LogicalType::DOUBLE, ValueColumnKind::Level}
+	};
+	return columns;
+}
+
+const std::vector<ValueColumnDefinition> &GetVariableValueColumns() {
+	static const std::vector<ValueColumnDefinition> columns = {
+		{"level", LogicalType::DOUBLE, ValueColumnKind::Level},
+		{"marginal", LogicalType::DOUBLE, ValueColumnKind::Marginal},
+		{"lower", LogicalType::DOUBLE, ValueColumnKind::Lower},
+		{"upper", LogicalType::DOUBLE, ValueColumnKind::Upper},
+		{"scale", LogicalType::DOUBLE, ValueColumnKind::Scale}
+	};
+	return columns;
+}
+
+const std::vector<ValueColumnDefinition> &GetEquationValueColumns() {
+	static const std::vector<ValueColumnDefinition> columns = {
+		{"level", LogicalType::DOUBLE, ValueColumnKind::Level},
+		{"marginal", LogicalType::DOUBLE, ValueColumnKind::Marginal},
+		{"lower", LogicalType::DOUBLE, ValueColumnKind::Lower},
+		{"upper", LogicalType::DOUBLE, ValueColumnKind::Upper},
+		{"scale", LogicalType::DOUBLE, ValueColumnKind::Scale}
+	};
+	return columns;
+}
+
+const std::vector<ValueColumnDefinition> &GetFallbackValueColumns() {
+	static const std::vector<ValueColumnDefinition> columns = {
+		{"value", LogicalType::DOUBLE, ValueColumnKind::RawValue}
+	};
+	return columns;
 }
 
 } // namespace
 
+const std::vector<ValueColumnDefinition> &GetValueColumnDefinitions(int symbol_type) {
+	switch (symbol_type) {
+	case GMS_DT_SET:
+		return GetSetValueColumns();
+	case GMS_DT_PAR:
+		return GetParameterValueColumns();
+	case GMS_DT_VAR:
+		return GetVariableValueColumns();
+	case GMS_DT_EQU:
+		return GetEquationValueColumns();
+	default:
+		return GetFallbackValueColumns();
+	}
+}
+
 void BuildReadGDXSchema(const std::vector<std::string> &domain_labels, int symbol_type,
+						const std::vector<ValueColumnDefinition> &value_columns,
 						std::vector<LogicalType> &return_types, std::vector<std::string> &names) {
 	return_types.clear();
 	names.clear();
@@ -54,37 +98,14 @@ void BuildReadGDXSchema(const std::vector<std::string> &domain_labels, int symbo
 		add_unique_column(name, LogicalType::VARCHAR);
 	}
 
-	auto add_numeric_value_columns = [&](const std::vector<std::pair<std::string, LogicalType>> &cols) {
-		for (auto &col : cols) {
-			add_unique_column(col.first, col.second);
-		}
-	};
+	if (dimensionality > 1) {
+		add_unique_column("is_sparse_break", LogicalType::BOOLEAN);
+		add_unique_column("is_dense_run", LogicalType::BOOLEAN);
+	}
 
-	switch (symbol_type) {
-	case GMS_DT_SET: {
-		add_unique_column(MakeValueColumnName(symbol_type), LogicalType::BOOLEAN);
-		break;
-	}
-	case GMS_DT_PAR: {
-		add_unique_column(MakeValueColumnName(symbol_type), LogicalType::DOUBLE);
-		break;
-	}
-	case GMS_DT_VAR:
-	case GMS_DT_EQU: {
-		auto cols = std::vector<std::pair<std::string, LogicalType>> {
-			{"level", LogicalType::DOUBLE},
-			{"marginal", LogicalType::DOUBLE},
-			{"lower", LogicalType::DOUBLE},
-			{"upper", LogicalType::DOUBLE},
-			{"scale", LogicalType::DOUBLE}
-		};
-		add_numeric_value_columns(cols);
-		break;
-	}
-	default: {
-		add_unique_column("value", LogicalType::DOUBLE);
-		break;
-	}
+	const auto &columns_to_add = value_columns.empty() ? GetValueColumnDefinitions(symbol_type) : value_columns;
+	for (auto &col : columns_to_add) {
+		add_unique_column(col.name, col.type);
 	}
 }
 

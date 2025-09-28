@@ -1,0 +1,13 @@
+{
+  "name": "duckdb-gdx-wasm-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node -r ts-node/register extension_bundle.test.ts"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}
