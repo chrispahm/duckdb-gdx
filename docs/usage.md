@@ -68,6 +68,11 @@ The `read_gdx` table function materializes GDX symbol records. The output schema
 | `dimension_filters`  | `MAP<VARCHAR,VARCHAR>` | Restrict emitted rows by matching domain values. Keys are case-insensitive; duplicate keys raise an error. |
 | `value_columns`      | `LIST<VARCHAR>`   | Subset of value columns to project (e.g., `['value']`). |
 
+Equality predicates on domain columns written in a regular `WHERE` clause are automatically folded into the same
+filter set. For example, `WHERE i = 'seattle' AND j = 'new-york'` is treated identically to specifying
+`dimension_filters => map(['i', 'j'], ['seattle', 'new-york'])`, so you can rely on idiomatic SQL without giving up on
+early filter pushdown.
+
 ### Error handling
 
 `read_gdx` surfaces detailed exception messages including the originating file, symbol name, and failing GDX API call.

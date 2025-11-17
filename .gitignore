@@ -9,3 +9,4 @@ test/python/__pycache__/
 .Rhistory
 node_modules/
 test/wasm/node_modules/
+.venv/

@@ -9,7 +9,7 @@
     "baseUrl": "./"
   },
   "include": [
-    "./extension_bundle.test.ts",
+    "./**/*.ts",
     "../../scripts/wasm/extension_bundle.ts"
   ]
 }

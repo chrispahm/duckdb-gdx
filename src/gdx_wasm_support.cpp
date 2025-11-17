@@ -22,6 +22,8 @@
 #include <utility>
 #include <vector>
 
+#include "gxfile.hpp"
+
 namespace duckdb {
 namespace gdx {
 
@@ -135,6 +137,19 @@ std::optional<uint64_t> ParseContentRangeHeader(const char *headers) {
 	return std::nullopt;
 }
 
+std::string FetchResponseHeaders(emscripten_fetch_t *fetch) {
+	if (!fetch) {
+		return {};
+	}
+	const size_t length = emscripten_fetch_get_response_headers_length(fetch);
+	if (length == 0) {
+		return {};
+	}
+	std::vector<char> buffer(length + 1, '\0');
+	emscripten_fetch_get_response_headers(fetch, buffer.data(), buffer.size());
+	return std::string(buffer.data());
+}
+
 bool IsHttpUrl(const std::string &resource) {
 	auto trimmed = resource;
 	StringUtil::Trim(trimmed);
@@ -193,7 +208,8 @@ private:
 			if (fetch->totalBytes >= 0) {
 				content_length = static_cast<uint64_t>(fetch->totalBytes);
 			} else {
-				auto len = ParseContentLengthHeader(fetch->responseHeaders);
+				auto headers = FetchResponseHeaders(fetch);
+				auto len = ParseContentLengthHeader(headers.c_str());
 				if (len) {
 					content_length = *len;
 				}
@@ -269,11 +285,12 @@ private:
 				if (fetch->totalBytes >= 0) {
 					content_length = static_cast<uint64_t>(fetch->totalBytes);
 				} else {
-					auto total = ParseContentRangeHeader(fetch->responseHeaders);
+					auto headers = FetchResponseHeaders(fetch);
+					auto total = ParseContentRangeHeader(headers.c_str());
 					if (total) {
 						content_length = *total;
 					} else {
-						auto len = ParseContentLengthHeader(fetch->responseHeaders);
+						auto len = ParseContentLengthHeader(headers.c_str());
 						if (len) {
 							content_length = *len;
 						} else if (fetch->status == 200) {
@@ -369,6 +386,21 @@ EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_set_http_header(const char *name, cons
 EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_clear_http_headers() {
 	GlobalHeaderRegistry::Get().Clear();
 }
+
+extern "C++" {
+namespace gdx {
+std::string DLLLoadPath = "";
+}
+}
+
+// Expose a stable C wrapper to set the GDX DLL load path from JS/WASM.
+// Exporting the C++ global directly would require dealing with mangled names.
+// EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_set_load_path(const char *path) {
+// 	// Defensive: allow null pointer
+// 	const char *p = path ? path : "";
+// 	::gdx::DLLLoadPath.assign(p);
+// }
+// export the dllloadpath as _ZN3gdx11DLLLoadPathE
 
 } // extern "C"
 

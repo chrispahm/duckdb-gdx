@@ -1,8 +1,8 @@
 #include "gdx/gdx_file_provider.hpp"
 
-#ifdef __EMSCRIPTEN__
+// #ifdef __EMSCRIPTEN__
 #include "gdx/gdx_wasm_support.hpp"
-#endif
+// #endif
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"

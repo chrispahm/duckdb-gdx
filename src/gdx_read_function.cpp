@@ -6,6 +6,12 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
+#include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/operator/logical_get.hpp"
 
 #include "gdx/gdx_error.hpp"
 #include "gdx/gdx_file_provider.hpp"
@@ -30,6 +36,14 @@ namespace gdx {
 
 namespace {
 
+struct DimensionFilterEntry {
+	std::string value;
+	std::string display_name;
+	std::string source;
+};
+
+using DimensionFilterMap = std::unordered_map<std::string, DimensionFilterEntry>;
+
 struct ReadGDXBindData : public TableFunctionData {
 	std::string file_or_url;
 	std::string resolved_path;
@@ -46,11 +60,13 @@ struct ReadGDXBindData : public TableFunctionData {
 	idx_t value_column_count {0};
 	std::vector<std::string> domain_labels;
 	std::vector<ValueColumnDefinition> value_columns;
-	std::unordered_map<std::string, std::string> dimension_filters;
+	DimensionFilterMap dimension_filters;
 	std::vector<std::string> requested_value_columns;
 	std::vector<idx_t> dimension_filter_indices;
 	std::vector<std::string> dimension_filter_values;
 	bool has_dimension_filters {false};
+	std::vector<std::string> column_names;
+	bool dimension_filter_bindings_prepared {false};
 	bool has_value_column_filter {false};
 };
 
@@ -68,7 +84,6 @@ struct ReadGDXGlobalState : public GlobalTableFunctionState {
 	bool data_exhausted {false};
 	std::string resolved_path;
 	std::string symbol;
-	std::unordered_map<std::string, std::string> dimension_filters;
 	std::vector<std::string> requested_value_columns;
 	std::vector<idx_t> dimension_filter_indices;
 	std::vector<std::string> dimension_filter_values;
@@ -129,8 +144,110 @@ struct ReadGDXLocalState : public LocalTableFunctionState {
 	}
 };
 
-std::unordered_map<std::string, std::string> ParseDimensionFilters(const Value &parameter) {
-	std::unordered_map<std::string, std::string> filters;
+string NormalizeDimensionKey(const string &input) {
+	auto normalized = StringUtil::Lower(input);
+	StringUtil::Trim(normalized);
+	return normalized;
+}
+
+bool TryAddDimensionFilter(ReadGDXBindData &bind, const string &dimension_name, const string &raw_value,
+	                         const string &source) {
+	if (dimension_name.empty()) {
+		return false;
+	}
+	auto normalized_key = NormalizeDimensionKey(dimension_name);
+	if (normalized_key.empty()) {
+		return false;
+	}
+	auto value = raw_value;
+	StringUtil::Trim(value);
+	if (value.empty()) {
+		return false;
+	}
+	auto existing = bind.dimension_filters.find(normalized_key);
+	if (existing != bind.dimension_filters.end()) {
+		if (!StringUtil::CIEquals(existing->second.value, value)) {
+			throw InvalidInputException(
+			    "Conflicting filters for dimension '%s': %s requires '%s' but %s requires '%s'", dimension_name.c_str(),
+			    source.c_str(), value.c_str(), existing->second.source.c_str(), existing->second.value.c_str());
+		}
+		return false;
+	}
+	DimensionFilterEntry entry;
+	entry.value = value;
+	entry.display_name = dimension_name;
+	entry.source = source;
+	bind.dimension_filters.emplace(normalized_key, std::move(entry));
+	bind.dimension_filter_bindings_prepared = false;
+	return true;
+}
+
+void PrepareDimensionFilters(ReadGDXBindData &bind) {
+	bind.dimension_filter_indices.clear();
+	bind.dimension_filter_values.clear();
+	bind.has_dimension_filters = !bind.dimension_filters.empty();
+	if (!bind.has_dimension_filters) {
+		bind.dimension_filter_bindings_prepared = true;
+		return;
+	}
+	if (bind.column_names.empty()) {
+		throw InternalException("read_gdx: column metadata unavailable when preparing dimension filters");
+	}
+
+	std::unordered_map<string, idx_t> dimension_name_map;
+	dimension_name_map.reserve(bind.domain_column_count * 3 + 2);
+	auto build_generated_name = [](idx_t index) {
+		return StringUtil::Format("dim_%d", static_cast<int>(index + 1));
+	};
+
+	string valid_dimensions_str;
+	for (idx_t i = 0; i < bind.domain_column_count && i < bind.column_names.size(); ++i) {
+		if (!valid_dimensions_str.empty()) {
+			valid_dimensions_str += ", ";
+		}
+		valid_dimensions_str += bind.column_names[i];
+		auto normalized_name = NormalizeDimensionKey(bind.column_names[i]);
+		dimension_name_map[normalized_name] = i;
+		const auto &label = bind.domain_labels[i];
+		if (!label.empty() && label != "*") {
+			dimension_name_map[NormalizeDimensionKey(label)] = i;
+		} else {
+			auto generated = build_generated_name(i);
+			dimension_name_map[NormalizeDimensionKey(generated)] = i;
+			if (bind.domain_column_count == 1 && bind.dimension == 1) {
+				dimension_name_map[NormalizeDimensionKey(bind.symbol)] = i;
+			}
+		}
+	}
+
+	std::unordered_set<idx_t> used_indices;
+	for (auto &entry : bind.dimension_filters) {
+		auto lookup = dimension_name_map.find(entry.first);
+		if (lookup == dimension_name_map.end()) {
+			throw InvalidInputException("Unknown dimension '%s' supplied via %s. Valid dimensions: %s",
+			                             entry.second.display_name.c_str(), entry.second.source.c_str(),
+			                             valid_dimensions_str.c_str());
+		}
+		auto dim_index = lookup->second;
+		if (!used_indices.insert(dim_index).second) {
+			throw InvalidInputException("Duplicate dimension filter supplied for '%s'", bind.column_names[dim_index].c_str());
+		}
+		bind.dimension_filter_indices.push_back(dim_index);
+		bind.dimension_filter_values.push_back(entry.second.value);
+	}
+
+	bind.dimension_filter_bindings_prepared = true;
+}
+
+void EnsureDimensionFiltersPrepared(ReadGDXBindData &bind) {
+	if (!bind.dimension_filter_bindings_prepared) {
+		PrepareDimensionFilters(bind);
+	}
+}
+
+
+DimensionFilterMap ParseDimensionFilters(const Value &parameter) {
+	DimensionFilterMap filters;
 	if (parameter.IsNull()) {
 		return filters;
 	}
@@ -151,7 +268,22 @@ std::unordered_map<std::string, std::string> ParseDimensionFilters(const Value &
 		if (key.type().id() != LogicalTypeId::VARCHAR || value.type().id() != LogicalTypeId::VARCHAR) {
 			throw InvalidInputException("dimension_filters keys and values must be VARCHAR");
 		}
-		filters[key.ToString()] = value.ToString();
+		auto trimmed_key = key.ToString();
+		auto trimmed_value = value.ToString();
+		StringUtil::Trim(trimmed_key);
+		StringUtil::Trim(trimmed_value);
+		auto normalized_key = NormalizeDimensionKey(trimmed_key);
+		if (normalized_key.empty()) {
+			throw InvalidInputException("dimension_filters keys must contain at least one non-whitespace character");
+		}
+		if (trimmed_value.empty()) {
+			throw InvalidInputException("dimension_filters values must contain at least one non-whitespace character");
+		}
+		auto inserted = filters.emplace(normalized_key,
+		                                DimensionFilterEntry {trimmed_value, trimmed_key, "dimension_filters parameter"});
+		if (!inserted.second) {
+			throw InvalidInputException("Duplicate dimension filter supplied for '%s'", key.ToString().c_str());
+		}
 	}
 	return filters;
 }
@@ -176,6 +308,124 @@ std::vector<std::string> ParseValueColumnList(const Value &parameter) {
 		columns.emplace_back(entry.ToString());
 	}
 	return columns;
+}
+
+Expression *StripCasts(Expression &expr) {
+	Expression *current = &expr;
+	while (current->type == ExpressionType::BOUND_CAST) {
+		current = current->Cast<BoundCastExpression>().child.get();
+	}
+	return current;
+}
+
+bool ExtractColumnBinding(Expression &expr, LogicalGet &get, idx_t &column_index, string &column_name) {
+	auto *node = StripCasts(expr);
+	if (node->expression_class != ExpressionClass::BOUND_REF) {
+		return false;
+	}
+	auto &ref = node->Cast<BoundReferenceExpression>();
+	const auto &column_ids = get.GetColumnIds();
+	if (ref.index < 0 || static_cast<idx_t>(ref.index) >= column_ids.size()) {
+		return false;
+	}
+	auto physical_index = column_ids[ref.index].GetPrimaryIndex();
+	if (physical_index >= get.names.size()) {
+		return false;
+	}
+	column_index = physical_index;
+	column_name = get.names[physical_index];
+	return true;
+}
+
+bool ExtractConstantString(Expression &expr, string &value) {
+	auto *node = StripCasts(expr);
+	if (node->expression_class != ExpressionClass::BOUND_CONSTANT) {
+		return false;
+	}
+	auto &constant = node->Cast<BoundConstantExpression>();
+	if (constant.value.IsNull()) {
+		return false;
+	}
+	Value string_value;
+	try {
+		string_value = constant.value.CastAs(LogicalType::VARCHAR);
+	} catch (...) {
+		return false;
+	}
+	value = string_value.GetValue<string>();
+	StringUtil::Trim(value);
+	return true;
+}
+
+bool ExtractColumnConstantPair(Expression &left, Expression &right, LogicalGet &get, idx_t &column_index,
+	                           string &column_name, string &value) {
+	if (ExtractColumnBinding(left, get, column_index, column_name) && ExtractConstantString(right, value)) {
+		return true;
+	}
+	if (ExtractColumnBinding(right, get, column_index, column_name) && ExtractConstantString(left, value)) {
+		return true;
+	}
+	return false;
+}
+
+bool ExtractComparisonFilter(BoundComparisonExpression &expr, LogicalGet &get, ReadGDXBindData &bind) {
+	switch (expr.type) {
+	case ExpressionType::COMPARE_EQUAL:
+	case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
+		break;
+	default:
+		return false;
+	}
+	idx_t column_index = 0;
+	string column_name;
+	string constant_value;
+	if (!ExtractColumnConstantPair(*expr.left, *expr.right, get, column_index, column_name, constant_value)) {
+		return false;
+	}
+	if (column_index >= bind.domain_column_count || constant_value.empty()) {
+		return false;
+	}
+	return TryAddDimensionFilter(bind, column_name, constant_value, "WHERE clause");
+}
+
+bool ExtractFiltersFromExpression(Expression &expr, LogicalGet &get, ReadGDXBindData &bind) {
+	switch (expr.type) {
+	case ExpressionType::CONJUNCTION_AND: {
+		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
+		bool added = false;
+		for (auto &child : conjunction.children) {
+			added |= ExtractFiltersFromExpression(*child, get, bind);
+		}
+		return added;
+	}
+	default:
+		break;
+	}
+	if (expr.expression_class == ExpressionClass::BOUND_COMPARISON) {
+		auto &comparison = expr.Cast<BoundComparisonExpression>();
+		return ExtractComparisonFilter(comparison, get, bind);
+	}
+	return false;
+}
+
+void ReadGDXPushdownComplexFilter(ClientContext &, LogicalGet &get, FunctionData *bind_data_p,
+	                               vector<unique_ptr<Expression>> &filters) {
+	if (!bind_data_p) {
+		return;
+	}
+	auto &bind = bind_data_p->Cast<ReadGDXBindData>();
+	if (bind.domain_column_count == 0) {
+		return;
+	}
+	bool added_filters = false;
+	for (auto &expr : filters) {
+		if (expr) {
+			added_filters |= ExtractFiltersFromExpression(*expr, get, bind);
+		}
+	}
+	if (added_filters) {
+		PrepareDimensionFilters(bind);
+	}
 }
 
 unique_ptr<FunctionData> ReadGDXBind(ClientContext &context, TableFunctionBindInput &input,
@@ -260,58 +510,8 @@ unique_ptr<FunctionData> ReadGDXBind(ClientContext &context, TableFunctionBindIn
 	if (bind_data->value_column_count == 0) {
 		throw InvalidInputException("value_columns must select at least one column");
 	}
-
-	if (bind_data->has_dimension_filters) {
-		auto normalize_key = [](const string &input) {
-			auto copy = StringUtil::Lower(input);
-			StringUtil::Trim(copy);
-			return copy;
-		};
-
-		std::unordered_map<string, idx_t> dimension_name_map;
-		dimension_name_map.reserve(bind_data->domain_column_count * 2 + 1);
-		for (idx_t i = 0; i < bind_data->domain_column_count && i < names.size(); ++i) {
-			auto normalized_name = normalize_key(names[i]);
-			dimension_name_map[normalized_name] = i;
-			auto label = bind_data->domain_labels[i];
-			if (!label.empty() && label != "*") {
-				auto normalized_label = normalize_key(label);
-				dimension_name_map[normalized_label] = i;
-			} else {
-				auto generated = StringUtil::Format("dim_%d", static_cast<int>(i + 1));
-				dimension_name_map[normalize_key(generated)] = i;
-				if (bind_data->domain_column_count == 1 && bind_data->dimension == 1) {
-					dimension_name_map[normalize_key(bind_data->symbol)] = i;
-				}
-			}
-		}
-
-		std::unordered_set<idx_t> used_indices;
-		string valid_dimensions_str;
-		for (idx_t i = 0; i < bind_data->domain_column_count && i < names.size(); ++i) {
-			if (!valid_dimensions_str.empty()) {
-				valid_dimensions_str += ", ";
-			}
-			valid_dimensions_str += names[i];
-		}
-
-		for (const auto &entry : bind_data->dimension_filters) {
-			auto key = normalize_key(entry.first);
-			auto value = entry.second;
-			StringUtil::Trim(value);
-			auto it = dimension_name_map.find(key);
-			if (it == dimension_name_map.end()) {
-				throw InvalidInputException("Unknown dimension '%s' for symbol '%s'. Valid dimensions: %s", entry.first.c_str(),
-				                             bind_data->symbol.c_str(), valid_dimensions_str.c_str());
-			}
-			idx_t dim_index = it->second;
-			if (!used_indices.insert(dim_index).second) {
-				throw InvalidInputException("Duplicate dimension filter supplied for '%s'", entry.first.c_str());
-			}
-			bind_data->dimension_filter_indices.push_back(dim_index);
-			bind_data->dimension_filter_values.push_back(value);
-		}
-	}
+	bind_data->column_names = names;
+	PrepareDimensionFilters(*bind_data);
 
 	return std::move(bind_data);
 }
@@ -324,7 +524,6 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 	state->symbol = bind.symbol;
 	state->dimension = bind.dimension;
 	state->record_count = bind.record_count;
-	state->dimension_filters = bind.dimension_filters;
 	state->has_dimension_filters = bind.has_dimension_filters;
 	state->requested_value_columns = bind.requested_value_columns;
 	state->dimension_filter_indices = bind.dimension_filter_indices;
@@ -551,6 +750,7 @@ void RegisterReadTableFunction(ExtensionLoader &loader) {
 	function.bind = ReadGDXBind;
 	function.init_global = ReadGDXInitGlobal;
 	function.init_local = ReadGDXInitLocal;
+	function.pushdown_complex_filter = ReadGDXPushdownComplexFilter;
  	function.named_parameters["dimension_filters"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
  	function.named_parameters["value_columns"] = LogicalType::LIST(LogicalType::VARCHAR);
 
