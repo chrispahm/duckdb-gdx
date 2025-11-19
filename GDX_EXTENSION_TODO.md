@@ -67,7 +67,7 @@ Last updated: 2025-09-28
 ## 5. WASM/backend for DuckDB-Wasm
 
 - [P0] ✅ (2025-09-27) Confirm GDX can compile to WASM: extend Emscripten build configuration (likely under `extension/wasm/` or `tools/wasm/`) to produce a `.a` or `.bc` archive.
-- [P0] ✅ (2025-09-27) Implement a WASM-specific `GDXRandomAccessProvider` that issues HTTP range requests via DuckDB’s `httpfs` or custom JS glue (fetch with `Range` headers) without downloading entire files.
+- [P0] ✅ (2025-09-27) Implement a WASM-specific `GDXRandomAccessProvider` that issues HTTP range requests via DuckDB’s internal HTTP module or custom JS glue (fetch with `Range` headers) without downloading entire files.
 - [P0] ✅ (2025-09-27) Wire provider into DuckDB-WASM extension loader (`scripts/wasm/extension_bundle.ts` or equivalent) to register asynchronous byte-range fetching before invoking `gdxOpenReadFromRandomAccess`.
 - [P0] ✅ (2025-09-27) Ensure WASM bundling exports necessary C functions (`extern "C"`) so the JS glue can initialize and pass callbacks.
 - [P1] Implement client-side caching and chunk reuse (e.g., simple LRU) to minimize redundant range downloads for large `.gdx` files.

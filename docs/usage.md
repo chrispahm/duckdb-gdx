@@ -14,7 +14,7 @@ PRAGMA gdx_preload('s3://bucket/model.gdx', force_reload=true);
 
 | Name          | Type     | Default | Description |
 |---------------|----------|---------|-------------|
-| `file_or_url` | `VARCHAR`| —       | Path or URL pointing to the `.gdx` file. Remote paths delegate to DuckDB's `httpfs` or the active VFS. |
+| `file_or_url` | `VARCHAR`| —       | Path or URL pointing to the `.gdx` file. Remote paths delegate to DuckDB's native HTTP module or the active VFS. |
 | `force_reload`| `BOOLEAN`| `false` | Drop any cached metadata before reloading from disk. |
 | `symbol`      | `VARCHAR`| `NULL`  | Optional symbol name to check for existence. The pragma throws if the symbol cannot be found. |
 
@@ -85,7 +85,7 @@ semantics. The original special value codes stay accessible through auxiliary va
   symbol descriptors and resolves case-insensitive lookups without reopening the file.
 - **Filter early** via `dimension_filters` and `value_columns`. Because the filter set is compiled into the scan state,
   unnecessary coordinates are skipped before materializing vectors.
-- **Remote files** rely on DuckDB's `httpfs` or custom VFS providers. When using WASM, pair `initializeDuckDBGDX` from
+- **Remote files** rely on DuckDB's native HTTP module or custom VFS providers. When using WASM, pair `initializeDuckDBGDX` from
   `scripts/wasm/extension_bundle.ts` with header configuration to pass authentication tokens for HTTP range requests.
   A full JavaScript walkthrough that targets a hosted dataset lives in
   `examples/js/wasm-read-gdx.js`.

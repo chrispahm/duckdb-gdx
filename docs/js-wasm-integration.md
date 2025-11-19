@@ -155,8 +155,8 @@ bootstrap().catch((error) => {
 Key points:
 
 - Populate `bundle.extensions` before calling `instantiate` so DuckDB knows where to download `duckdb_gdx.duckdb_extension.wasm`.
-- `initializeDuckDBGDX` installs `httpfs`, loads both extensions, and applies optional HTTP headers so that range requests (S3 pre-signed URLs, API gateways, etc.) work seamlessly.
-- `registerFileURL` maps a logical filename (`transport.gdx`) to a real HTTP endpoint; the `DuckDBDataProtocol.HTTP` hint ensures the WASM backend drives HTTP range reads through `httpfs`.
+- `initializeDuckDBGDX`
+- `registerFileURL` maps a logical filename (`transport.gdx`) to a real HTTP endpoint; the `DuckDBDataProtocol.HTTP` hint ensures the WASM backend drives HTTP range reads through the default HTTP module.
 
 If you prefer the SQL approach, replace the helper call with:
 
@@ -187,7 +187,7 @@ Ensure that the URL you pass exposes the `<version>/<platform>/<extension>.duckd
 | --- | --- | --- |
 | `INSTALL duckdb_gdx` fails with `HTTP 404` | The extension file is not reachable under the expected `<version>/<platform>/` URL | Verify hosting path and version. Remember to match the DuckDB version baked into your DuckDB-WASM bundle. |
 | `WebAssembly.instantiate()` throws a MIME-type error | Server responds without `application/wasm` (or missing Brotli encoding header) | Add `Content-Type: application/wasm` (and `Content-Encoding: br` if you serve the compressed variant). |
-| Queries hang on the first `read_gdx` call | `httpfs` was not loaded, or headers are missing for authenticated endpoints | Ensure `initializeDuckDBGDX` (or the SQL snippet) runs before registering files, and double-check your header configuration. |
+| Queries hang on the first `read_gdx` call | The default HTTP module was not loaded, or headers are missing for authenticated endpoints | Ensure `initializeDuckDBGDX` (or the SQL snippet) runs before registering files, and double-check your header configuration. |
 | `TypeError: DuckDBBundles.extendBundle is not a function` | Using an older DuckDB-WASM version | Upgrade `@duckdb/duckdb-wasm` or mutate `bundle.extensions` manually: `bundle.extensions.push({ name: 'duckdb_gdx', mainModule: '...' })`. |
 
 For a full worked example, consult `examples/js/wasm-read-gdx.js` in this repository. It demonstrates the same concepts without relying on the helper utilities.

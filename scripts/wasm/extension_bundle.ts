@@ -43,13 +43,9 @@ export interface DuckDBGDXDatabase {
 }
 
 /**
- * Installs and loads the required extensions for WASM usage. httpfs is loaded first
- * to ensure HTTP range requests operate correctly when the DuckDB runtime delegates
- * to the built-in HTTP subsystem.
+ * Installs and loads the required extensions for WASM usage.
  */
 export async function ensureDuckDBGDXLoaded(db: DuckDBGDXDatabase): Promise<void> {
-  await db.installExtension('httpfs', { force: true });
-  await db.loadExtension('httpfs');
   await db.installExtension('duckdb_gdx', { force: true });
   await db.loadExtension('duckdb_gdx');
 }

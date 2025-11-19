@@ -37,15 +37,13 @@ async function main() {
       // example compatible with duckdb-wasm versions that do not expose
       // installExtension/loadExtension helpers.
       await connection.query(`
-        INSTALL httpfs;
-        LOAD httpfs;
         INSTALL duckdb_gdx;
         LOAD duckdb_gdx;
       `);
 
       // Optionally register a logical name for the remote file. The HTTP data
       // protocol signals to DuckDB that range requests should be used when the
-      // duckdb_gdx WASM adapter pulls data through httpfs.
+      // duckdb_gdx WASM adapter pulls data through the default HTTP module.
       await connection.useUnsafe(async (bindings) => {
         await bindings.registerFileURL(
           'transport.gdx',

@@ -69,8 +69,6 @@ async function run(): Promise<void> {
   const db = new RecordingDatabase();
   await ensureDuckDBGDXLoaded(db);
   assertDeepEqual(db.calls, [
-    'install:httpfs',
-    'load:httpfs',
     'install:duckdb_gdx',
     'load:duckdb_gdx'
   ]);
@@ -79,8 +77,6 @@ async function run(): Promise<void> {
   const db2 = new RecordingDatabase();
   await initializeDuckDBGDX(db2, module2, { 'X-Env': 'ci' });
   assertDeepEqual(db2.calls, [
-    'install:httpfs',
-    'load:httpfs',
     'install:duckdb_gdx',
     'load:duckdb_gdx'
   ]);
