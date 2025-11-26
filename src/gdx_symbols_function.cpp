@@ -6,6 +6,7 @@
 #include "gdx/gdx_error.hpp"
 #include "gdx/gdx_metadata_cache.hpp"
 #include "gdx/gdx_symbol_utils.hpp"
+#include "duckdb/main/extension_util.hpp"
 
 #include "gdx_random_access.h"
 
@@ -115,13 +116,13 @@ void GDXSymbolsFunction(ClientContext &, TableFunctionInput &input, DataChunk &o
 
 } // namespace
 
-void RegisterSymbolsTableFunction(ExtensionLoader &loader) {
+void RegisterSymbolsTableFunction(DatabaseInstance &db) {
 	auto function = TableFunction("gdx_symbols", {LogicalType::VARCHAR}, GDXSymbolsFunction);
 	function.bind = GDXSymbolsBind;
 	function.init_global = GDXSymbolsInitGlobal;
 	function.init_local = GDXSymbolsInitLocal;
 
-	loader.RegisterFunction(function);
+	ExtensionUtil::RegisterFunction(db, function);
 }
 
 } // namespace gdx

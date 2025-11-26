@@ -387,21 +387,6 @@ EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_clear_http_headers() {
 	GlobalHeaderRegistry::Get().Clear();
 }
 
-extern "C++" {
-namespace gdx {
-std::string DLLLoadPath = "";
-}
-}
-
-// Expose a stable C wrapper to set the GDX DLL load path from JS/WASM.
-// Exporting the C++ global directly would require dealing with mangled names.
-// EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_set_load_path(const char *path) {
-// 	// Defensive: allow null pointer
-// 	const char *p = path ? path : "";
-// 	::gdx::DLLLoadPath.assign(p);
-// }
-// export the dllloadpath as _ZN3gdx11DLLLoadPathE
-
 } // extern "C"
 
 } // namespace gdx

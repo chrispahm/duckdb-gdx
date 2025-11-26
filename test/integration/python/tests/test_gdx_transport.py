@@ -186,5 +186,10 @@ def test_transport_gdx_metadata_and_data(duckdb_connection: duckdb.DuckDBPyConne
         """,
         [str(TRANSPORT_GDX), "x"],
     ).fetchall()
+    print(filtered_rows)
     assert filtered_rows == [(50.0, 0.0)]
     print("DuckDB GDX transport tests passed.")
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(pytest.main(["-v", "-s", __file__]))

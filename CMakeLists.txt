@@ -6,15 +6,14 @@ set(TARGET_NAME duckdb_gdx)
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
-# set(DUCKDB_EXTENSION_DUCKDB_GDX_ADDITIONAL_WASM_EXPORTS "\"_duckdb_gdx_wasm_set_http_header\",\"_duckdb_gdx_wasm_clear_http_headers\",\"_duckdb_gdx_wasm_set_load_path\", \"DLLLoadPath\"")
 if(EMSCRIPTEN)
   # _LINKED_LIBS influences only Wasm compilation it's unclear why this is
   # needed, but somehow the global symbol pj_release from PROJ is not properly
   # exported otherwise this solves by basically re-linking (at the moment the
   # Wasm binary is actually produced)
-  set(DUCKDB_EXTENSION_DUCKDB_GDX_LINKED_LIBS
-      # "${CMAKE_CURRENT_SOURCE_DIR}/gdx/build-wasm/libgdx-static.a")
-      "${CMAKE_CURRENT_SOURCE_DIR}/gdx/build-wasm_2/libgdx-static.a")
+  #set(DUCKDB_EXTENSION_DUCKDB_GDX_LINKED_LIBS
+  #     "${CMAKE_CURRENT_SOURCE_DIR}/gdx/build-wasm/libgdx-static.a")
+       # "${CMAKE_CURRENT_SOURCE_DIR}/gdx/build-wasm_2/libgdx-static.a")
 endif()
 
 project(${TARGET_NAME})

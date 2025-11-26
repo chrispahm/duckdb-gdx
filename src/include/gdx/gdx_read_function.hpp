@@ -6,7 +6,7 @@ namespace duckdb {
 namespace gdx {
 
 //! Register the read_gdx table function with DuckDB.
-void RegisterReadTableFunction(ExtensionLoader &loader);
+void RegisterReadTableFunction(DatabaseInstance &db);
 
 } // namespace gdx
 } // namespace duckdb

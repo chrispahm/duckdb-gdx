@@ -1,11 +1,11 @@
 #pragma once
 
 namespace duckdb {
-class ExtensionLoader;
+class DatabaseInstance;
 
 namespace gdx {
 
-void RegisterPreloadPragma(ExtensionLoader &loader);
+void RegisterPreloadPragma(DatabaseInstance &db);
 
 } // namespace gdx
 } // namespace duckdb

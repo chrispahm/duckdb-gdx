@@ -50,8 +50,7 @@ void GDXFileRandomAccessProvider::Initialize(ClientContext &context, const std::
 		resolved_path = file_or_url;
 	}
 
-	auto flags = FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS |
-	             FileFlags::FILE_FLAGS_MULTI_CLIENT_ACCESS;
+	auto flags = FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS;
 
 	unique_ptr<FileHandle> handle;
 	try {

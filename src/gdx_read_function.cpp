@@ -20,6 +20,7 @@
 #undef NO_SET_LOAD_PATH_DEF
 #include "gdx/gdx_metadata_cache.hpp"
 #include "gdx/gdx_symbol_utils.hpp"
+#include "duckdb/main/extension_util.hpp"
 
 #include "gclgms.h"
 
@@ -312,7 +313,7 @@ std::vector<std::string> ParseValueColumnList(const Value &parameter) {
 
 Expression *StripCasts(Expression &expr) {
 	Expression *current = &expr;
-	while (current->type == ExpressionType::BOUND_CAST) {
+	while (current->expression_class == ExpressionClass::BOUND_CAST) {
 		current = current->Cast<BoundCastExpression>().child.get();
 	}
 	return current;
@@ -348,7 +349,7 @@ bool ExtractConstantString(Expression &expr, string &value) {
 	}
 	Value string_value;
 	try {
-		string_value = constant.value.CastAs(LogicalType::VARCHAR);
+		string_value = constant.value.DefaultCastAs(LogicalType::VARCHAR);
 	} catch (...) {
 		return false;
 	}
@@ -745,7 +746,7 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 
 } // namespace
 
-void RegisterReadTableFunction(ExtensionLoader &loader) {
+void RegisterReadTableFunction(DatabaseInstance &db) {
 	auto function = TableFunction("read_gdx", {LogicalType::VARCHAR, LogicalType::VARCHAR}, ReadGDXFunction);
 	function.bind = ReadGDXBind;
 	function.init_global = ReadGDXInitGlobal;
@@ -754,7 +755,7 @@ void RegisterReadTableFunction(ExtensionLoader &loader) {
  	function.named_parameters["dimension_filters"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
  	function.named_parameters["value_columns"] = LogicalType::LIST(LogicalType::VARCHAR);
 
-	loader.RegisterFunction(function);
+	ExtensionUtil::RegisterFunction(db, function);
 }
 
 } // namespace gdx

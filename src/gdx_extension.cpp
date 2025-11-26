@@ -7,20 +7,14 @@
 
 namespace duckdb {
 
-namespace gdx {
-void RegisterReadTableFunction(ExtensionLoader &loader);
-void RegisterSymbolsTableFunction(ExtensionLoader &loader);
-} // namespace gdx
-
-static void LoadInternal(ExtensionLoader &loader) {
-	loader.SetDescription("DuckDB GDX extension with table functions for reading GDX files");
-	gdx::RegisterReadTableFunction(loader);
-	gdx::RegisterSymbolsTableFunction(loader);
-	gdx::RegisterPreloadPragma(loader);
+static void LoadInternal(DatabaseInstance &db) {
+	gdx::RegisterReadTableFunction(db);
+	gdx::RegisterSymbolsTableFunction(db);
+	gdx::RegisterPreloadPragma(db);
 }
 
-void DuckdbGdxExtension::Load(ExtensionLoader &loader) {
-	LoadInternal(loader);
+void DuckdbGdxExtension::Load(DuckDB &db) {
+	LoadInternal(*db.instance);
 }
 
 std::string DuckdbGdxExtension::Name() {
@@ -39,8 +33,13 @@ std::string DuckdbGdxExtension::Version() const {
 
 extern "C" {
 
-DUCKDB_CPP_EXTENSION_ENTRY(duckdb_gdx, loader) {
-	duckdb::LoadInternal(loader);
+DUCKDB_EXTENSION_API void duckdb_gdx_init(duckdb::DatabaseInstance &db) {
+	duckdb::DuckDB db_wrapper(db);
+	db_wrapper.LoadExtension<duckdb::DuckdbGdxExtension>();
+}
+
+DUCKDB_EXTENSION_API const char *duckdb_gdx_version() {
+	return duckdb::DuckDB::LibraryVersion();
 }
 
 }
