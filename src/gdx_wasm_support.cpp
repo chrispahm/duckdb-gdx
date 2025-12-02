@@ -11,7 +11,9 @@
 #include <cstdint>
 #include <cstring>
 #include <emscripten/emscripten.h>
+#ifndef DUCKDB_GDX_NO_WASM_HTTP
 #include <emscripten/fetch.h>
+#endif
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -26,6 +28,33 @@
 
 namespace duckdb {
 namespace gdx {
+
+#ifdef DUCKDB_GDX_NO_WASM_HTTP
+
+// When HTTP is disabled (for DuckDB-WASM extension compatibility), these functions are no-ops.
+// HTTP URLs should be fetched by JavaScript and passed via registerFileBuffer.
+
+bool InitializeWasmRandomAccess(RandomAccessAdapter &, const std::string &) {
+	// HTTP random access is not supported in this build
+	return false;
+}
+
+extern "C" {
+
+EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_set_http_header(const char *, const char *) {
+	// No-op when HTTP is disabled
+}
+
+EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_clear_http_headers() {
+	// No-op when HTTP is disabled
+}
+
+} // extern "C"
+
+} // namespace gdx
+} // namespace duckdb
+
+#else // DUCKDB_GDX_NO_WASM_HTTP not defined - full HTTP support
 
 namespace {
 
@@ -391,5 +420,7 @@ EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_clear_http_headers() {
 
 } // namespace gdx
 } // namespace duckdb
+
+#endif // DUCKDB_GDX_NO_WASM_HTTP
 
 #endif // __EMSCRIPTEN__

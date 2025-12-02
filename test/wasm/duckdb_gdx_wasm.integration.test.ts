@@ -1,11 +1,9 @@
 import fs from 'node:fs/promises';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { AsyncDuckDB, ConsoleLogger, createWorker } from '@duckdb/duckdb-wasm';
-
-import { initializeDuckDBGDX } from '../../scripts/wasm/extension_bundle';
-import type { DuckDBGDXDatabase } from '../../scripts/wasm/extension_bundle';
 
 type DuckDBConnection = Awaited<ReturnType<AsyncDuckDB['connect']>>;
 
@@ -32,6 +30,57 @@ function assertDeepEqual(actual: unknown, expected: unknown, message?: string): 
   }
 }
 
+const EXTENSION_SERVER_PORT = 19876;
+
+/**
+ * Start a simple HTTP server to serve the extension files.
+ * DuckDB-WASM expects extensions at: {repository}/v{version}/{platform}/{name}.duckdb_extension.wasm
+ */
+async function startExtensionServer(): Promise<http.Server> {
+  // Use the repository directory which has the correct structure (v1.3.2/wasm_eh/)
+  const repositoryDir = path.resolve(__dirname, '../../build/wasm_eh/repository');
+  
+  console.log(`Repository dir: ${repositoryDir}`);
+  
+  const server = http.createServer(async (req, res) => {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    
+    // Serve extension files from the repository directory
+    // URL pattern: /v1.3.2/wasm_eh/duckdb_gdx.duckdb_extension.wasm
+    const urlPath = req.url || '';
+    console.log(`HTTP request: ${urlPath}`);
+    
+    try {
+      const filePath = path.join(repositoryDir, urlPath);
+      console.log(`Serving file: ${filePath}`);
+      const content = await fs.readFile(filePath);
+      console.log(`Serving ${content.length} bytes`);
+      const contentType = filePath.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
+      res.writeHead(200);
+      res.end(content);
+    } catch (error) {
+      console.log(`File not found: ${urlPath}`, error);
+      res.writeHead(404);
+      res.end('Not found');
+    }
+  });
+  
+  return new Promise((resolve) => {
+    server.listen(EXTENSION_SERVER_PORT, () => {
+      resolve(server);
+    });
+  });
+}
+
 async function createDuckDB(): Promise<AsyncDuckDB> {
   const workerPath = path.resolve(__dirname, 'node_modules/@duckdb/duckdb-wasm/dist/duckdb-node-eh.worker.cjs');
   const wasmPath = path.resolve(__dirname, 'node_modules/@duckdb/duckdb-wasm/dist/duckdb-eh.wasm');
@@ -46,7 +95,7 @@ async function createDuckDB(): Promise<AsyncDuckDB> {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url === workerFileUrl) {
       shouldOverrideCreateObjectURL = true;
-  const contents = await fs.readFile(fileURLToPath(url));
+      const contents = await fs.readFile(fileURLToPath(url));
       const scriptSource = contents.toString('utf8');
       return new Response(scriptSource, {
         status: 200,
@@ -86,84 +135,69 @@ async function withConnection<T>(db: AsyncDuckDB, action: (connection: DuckDBCon
 }
 
 async function run(): Promise<void> {
-  const db = await createDuckDB();
-  // set allow_unsigned_extensions to true
-  await db.open({
-    allowUnsignedExtensions: true,
-    query: {
-      castTimestampToDate: true
-    }
-  });
+  // Start HTTP server to serve extension files
+  const extensionServer = await startExtensionServer();
+  console.log(`Extension server started on port ${EXTENSION_SERVER_PORT}`);
+  
   try {
-    await withConnection(db, async (connection) => {
-
-      const extensionDir = path.resolve(__dirname, '../../build/wasm_eh/extension/duckdb_gdx');
-      console.log(`Using duckdb_gdx extension from ${extensionDir}`);
-      const extensionVirtualDir = 'extensions/duckdb_gdx';
-      const extensionPackageVirtualPath = `${extensionVirtualDir}/v1.3.2/wasm_eh/duckdb_gdx.duckdb_extension`;
-      const extensionWasmVirtualPath = `${extensionVirtualDir}/v1.3.2/wasm_eh/duckdb_gdx.duckdb_extension.wasm`;
-      console.log(extensionWasmVirtualPath);
-      let extensionRegistered = false;
-      const registerDuckDBGDX = async () => {
-        if (extensionRegistered) {
-          return;
-        }
-        const packageBytes = await fs.readFile(path.join(extensionDir, 'duckdb_gdx.duckdb_extension'));
-        const packageView = new Uint8Array(packageBytes.buffer, packageBytes.byteOffset, packageBytes.byteLength);
-        await db.registerFileBuffer(extensionPackageVirtualPath, packageView);
-
-        const wasmBytes = await fs.readFile(path.join(extensionDir, 'duckdb_gdx.duckdb_extension.wasm'));
-        const wasmView = new Uint8Array(wasmBytes.buffer, wasmBytes.byteOffset, wasmBytes.byteLength);
-        await db.registerFileBuffer(extensionWasmVirtualPath, wasmView);
-        extensionRegistered = true;
-      };
-
-      const extensionHost: DuckDBGDXDatabase = {
-        async installExtension(name) {
-          if (name === 'duckdb_gdx') {
-            await registerDuckDBGDX();
-            console.log(`Installing duckdb_gdx extension from ${extensionVirtualDir}`);
-            await connection.query(`INSTALL ${name} FROM '${extensionVirtualDir}'`)
-            // await connection.query(`INSTALL ${name} FROM 'https://humusklimanetz-couch.thuenen.de/datasets/duckdb_gdx'`)
-            return;
-          }
-          await connection.query(`INSTALL ${name}`);
-        },
-        async loadExtension(name) {
-          await connection.query(`LOAD ${name}`);
-        }
-      };
-
-      await initializeDuckDBGDX(extensionHost, null);
-
-      const transportPath = path.resolve(__dirname, '../data/gdx/transport.gdx');
-      const virtualPath = 'test/data/gdx/transport.gdx';
-      const gdxBuffer = await fs.readFile(transportPath);
-      const gdxBytes = new Uint8Array(gdxBuffer.buffer, gdxBuffer.byteOffset, gdxBuffer.byteLength);
-      await db.registerFileBuffer(virtualPath, gdxBytes);
-
-  const symbolsResult = await connection.query(
-        `SELECT symbol_name, record_count::INTEGER AS record_count
-         FROM gdx_symbols('${virtualPath}')
-         WHERE symbol_name IN ('d', 'i', 'j')
-         ORDER BY symbol_name`
-      );
-  const symbolRows = symbolsResult.toArray() as SymbolRow[];
-      assertDeepEqual(symbolRows, [
-        { symbol_name: 'd', record_count: 6 },
-        { symbol_name: 'i', record_count: 2 },
-        { symbol_name: 'j', record_count: 3 }
-      ]);
-
-  const parameterResult = await connection.query(
-        `SELECT SUM(value)::INTEGER AS total FROM read_gdx('${virtualPath}', 'a')`
-      );
-  const parameterRows = parameterResult.toArray() as ParameterRow[];
-      assertEqual(parameterRows.length, 1, 'Expected a single result row when summing transport parameter values');
-      assertEqual(parameterRows[0]?.total, 950, 'Unexpected sum for parameter a in transport.gdx');
+    const db = await createDuckDB();
+    // Set allow_unsigned_extensions to true
+    await db.open({
+      allowUnsignedExtensions: true,
+      query: {
+        castTimestampToDate: true
+      }
     });
+    
+    try {
+      await withConnection(db, async (connection) => {
+        // Set custom extension repository to our local server
+        console.log('Setting custom_extension_repository...');
+        await connection.query(`SET custom_extension_repository = 'http://localhost:${EXTENSION_SERVER_PORT}'`);
+        
+        // Load the extension (INSTALL is a no-op in DuckDB-WASM)
+        console.log('Loading duckdb_gdx extension...');
+        await connection.query('LOAD duckdb_gdx');
+        console.log('Extension loaded successfully!');
+
+        // Register test GDX file
+        const transportPath = path.resolve(__dirname, '../data/gdx/transport.gdx');
+        const virtualPath = 'test/data/gdx/transport.gdx';
+        const gdxBuffer = await fs.readFile(transportPath);
+        const gdxBytes = new Uint8Array(gdxBuffer.buffer, gdxBuffer.byteOffset, gdxBuffer.byteLength);
+        await db.registerFileBuffer(virtualPath, gdxBytes);
+
+        // Test gdx_symbols function
+        const symbolsResult = await connection.query(
+          `SELECT symbol_name, record_count::INTEGER AS record_count
+           FROM gdx_symbols('${virtualPath}')
+           WHERE symbol_name IN ('d', 'i', 'j')
+           ORDER BY symbol_name`
+        );
+        const symbolRows = symbolsResult.toArray() as SymbolRow[];
+        assertDeepEqual(symbolRows, [
+          { symbol_name: 'd', record_count: 6 },
+          { symbol_name: 'i', record_count: 2 },
+          { symbol_name: 'j', record_count: 3 }
+        ]);
+        console.log('gdx_symbols test passed!');
+
+        // Test read_gdx function
+        const parameterResult = await connection.query(
+          `SELECT SUM(value)::INTEGER AS total FROM read_gdx('${virtualPath}', 'a')`
+        );
+        const parameterRows = parameterResult.toArray() as ParameterRow[];
+        assertEqual(parameterRows.length, 1, 'Expected a single result row when summing transport parameter values');
+        assertEqual(parameterRows[0]?.total, 950, 'Unexpected sum for parameter a in transport.gdx');
+        console.log('read_gdx test passed!');
+        
+        console.log('All tests passed!');
+      });
+    } finally {
+      await db.terminate();
+    }
   } finally {
-    await db.terminate();
+    extensionServer.close();
   }
 }
 
