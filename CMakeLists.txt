@@ -41,6 +41,7 @@ else()
     src/gdx_extension.cpp
     src/gdx_read_function.cpp
     src/gdx_symbols_function.cpp
+    src/gdx_domain_values_function.cpp
     src/gdx_random_access_adapter.cpp
     src/gdx_file_provider.cpp
     src/gdx_handle.cpp

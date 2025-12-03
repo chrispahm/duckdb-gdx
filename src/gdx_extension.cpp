@@ -3,6 +3,7 @@
 #include "gdx/gdx_extension.hpp"
 #include "gdx/gdx_read_function.hpp"
 #include "gdx/gdx_symbols_function.hpp"
+#include "gdx/gdx_domain_values_function.hpp"
 #include "gdx/gdx_preload_pragma.hpp"
 
 namespace duckdb {
@@ -10,6 +11,7 @@ namespace duckdb {
 static void LoadInternal(DatabaseInstance &db) {
 	gdx::RegisterReadTableFunction(db);
 	gdx::RegisterSymbolsTableFunction(db);
+	gdx::RegisterGDXDomainValuesFunction(db);
 	gdx::RegisterPreloadPragma(db);
 }
 

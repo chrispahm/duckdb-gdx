@@ -18,6 +18,29 @@
 namespace duckdb {
 namespace gdx {
 
+// GDXSymbolDomainValuesCache implementation
+bool GDXSymbolDomainValuesCache::HasCachedValues(const std::string &symbol_name) const {
+	std::string key = StringUtil::Lower(symbol_name);
+	std::lock_guard<std::mutex> lock(mutex);
+	return symbol_domain_values.find(key) != symbol_domain_values.end();
+}
+
+const std::vector<std::vector<std::string>> *GDXSymbolDomainValuesCache::GetCachedValues(const std::string &symbol_name) const {
+	std::string key = StringUtil::Lower(symbol_name);
+	std::lock_guard<std::mutex> lock(mutex);
+	auto it = symbol_domain_values.find(key);
+	if (it == symbol_domain_values.end()) {
+		return nullptr;
+	}
+	return &it->second;
+}
+
+void GDXSymbolDomainValuesCache::SetCachedValues(const std::string &symbol_name, std::vector<std::vector<std::string>> values) {
+	std::string key = StringUtil::Lower(symbol_name);
+	std::lock_guard<std::mutex> lock(mutex);
+	symbol_domain_values[key] = std::move(values);
+}
+
 namespace {
 
 static std::shared_ptr<GDXMetadataEntry> LoadGDXMetadataInternal(GDXFileRandomAccessProvider &provider,

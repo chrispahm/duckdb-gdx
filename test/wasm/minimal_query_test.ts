@@ -59,18 +59,44 @@ server.listen(PORT, async () => {
   const gdxBytes = new Uint8Array(gdxBuffer.buffer, gdxBuffer.byteOffset, gdxBuffer.byteLength);
   await db.registerFileBuffer('fao_trade.gdx', gdxBytes);
 
-  const query = `
+  // Optimized query using dimension_filters parameter (filter pushdown to GDX level)
+  const optimizedQuery = `
+    SELECT * FROM read_gdx('fao_trade.gdx', 'p_faoTradeMatrix',
+      dimension_filters => map(['dim_1', 'dim_2', 'dim_3', 'dim_4'], ['1', '2', '561', 'Import'])
+    )
+  `;
+
+  // NOT optimized query using WHERE clause (full scan + post-filter)
+  const unoptimizedQuery = `
     SELECT * FROM read_gdx('fao_trade.gdx', 'p_faoTradeMatrix')
     WHERE dim_1 = '1' AND dim_2 = '2' AND dim_3 = '561' AND dim_4 = 'Import'
   `;
 
-  const start = performance.now();
-  const result = await conn.query(query);
-  const elapsed = performance.now() - start;
+  console.log('=== Running OPTIMIZED query (dimension_filters parameter) ===');
+  const startOptimized = performance.now();
+  const resultOptimized = await conn.query(optimizedQuery);
+  const elapsedOptimized = performance.now() - startOptimized;
 
-  console.log(`Query took ${elapsed.toFixed(2)} ms`);
-  console.log(`Rows: ${result.numRows}`);
-  console.log(result.toArray());
+  console.log(`Optimized query took ${elapsedOptimized.toFixed(2)} ms`);
+  console.log(`Rows: ${resultOptimized.numRows}`);
+  console.log(resultOptimized.toArray());
+
+  console.log('\n=== Running NOT OPTIMIZED query (WHERE clause) ===');
+  const startUnoptimized = performance.now();
+  const resultUnoptimized = await conn.query(unoptimizedQuery);
+  const elapsedUnoptimized = performance.now() - startUnoptimized;
+
+  console.log(`Unoptimized query took ${elapsedUnoptimized.toFixed(2)} ms`);
+  console.log(`Rows: ${resultUnoptimized.numRows}`);
+  console.log(resultUnoptimized.toArray());
+
+  console.log('\n=== Summary ===');
+  console.log(`Optimized (dimension_filters): ${elapsedOptimized.toFixed(2)} ms`);
+  console.log(`Unoptimized (WHERE clause):    ${elapsedUnoptimized.toFixed(2)} ms`);
+  if (elapsedUnoptimized > 0) {
+    const speedup = elapsedUnoptimized / elapsedOptimized;
+    console.log(`Speedup: ${speedup.toFixed(2)}x`);
+  }
 
   await conn.close();
   await db.terminate();
