@@ -9,10 +9,16 @@
 namespace duckdb {
 
 static void LoadInternal(DatabaseInstance &db) {
-	gdx::RegisterReadTableFunction(db);
-	gdx::RegisterSymbolsTableFunction(db);
+	fprintf(stderr, "[GDX] LoadInternal called\n");
+	// Register domain values FIRST to see if order matters
 	gdx::RegisterGDXDomainValuesFunction(db);
+	fprintf(stderr, "[GDX] Registered gdx_domain_values\n");
+	gdx::RegisterReadTableFunction(db);
+	fprintf(stderr, "[GDX] Registered read_gdx\n");
+	gdx::RegisterSymbolsTableFunction(db);
+	fprintf(stderr, "[GDX] Registered gdx_symbols\n");
 	gdx::RegisterPreloadPragma(db);
+	fprintf(stderr, "[GDX] Registered preload pragma\n");
 }
 
 void DuckdbGdxExtension::Load(DuckDB &db) {
@@ -35,9 +41,16 @@ std::string DuckdbGdxExtension::Version() const {
 
 extern "C" {
 
+// Force the linker to include RegisterGDXDomainValuesFunction by making it an exported function
+DUCKDB_EXTENSION_API void duckdb_gdx_force_domain_values_registration(duckdb::DatabaseInstance &db) {
+	duckdb::gdx::RegisterGDXDomainValuesFunction(db);
+}
+
 DUCKDB_EXTENSION_API void duckdb_gdx_init(duckdb::DatabaseInstance &db) {
+	fprintf(stderr, "[GDX] duckdb_gdx_init called\n");
 	duckdb::DuckDB db_wrapper(db);
 	db_wrapper.LoadExtension<duckdb::DuckdbGdxExtension>();
+	fprintf(stderr, "[GDX] Extension loaded via LoadExtension\n");
 }
 
 DUCKDB_EXTENSION_API const char *duckdb_gdx_version() {

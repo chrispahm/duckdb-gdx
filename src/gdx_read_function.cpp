@@ -156,7 +156,29 @@ static int FilteredReadCallback(const int *Indx, const double *Vals, void * /*Up
 		record.values[i] = Vals[i];
 	}
 	ctx->buffered_records.push_back(std::move(record));
+	return 1; // Continue reading
+}
 
+// Callback for gdxDataReadRawFastEx - stores all records (unfiltered fast read)
+// Uses the Uptr parameter properly
+static int GDX_CALLCONV UnfilteredReadCallback(const int *Indx, const double *Vals, int /*DimFrst*/, void *Uptr) {
+	auto *ctx = static_cast<FilteredReadContext *>(Uptr);
+	if (!ctx) {
+		return 0; // Stop reading if no context
+	}
+
+	// Increment progress counter (atomic for thread safety)
+	ctx->records_scanned.fetch_add(1, std::memory_order_relaxed);
+
+	FilteredReadRecord record;
+	record.raw_indices.resize(ctx->dimension);
+	for (idx_t i = 0; i < ctx->dimension; ++i) {
+		record.raw_indices[i] = Indx[i];
+	}
+	for (idx_t i = 0; i < GMS_VAL_MAX; ++i) {
+		record.values[i] = Vals[i];
+	}
+	ctx->buffered_records.push_back(std::move(record));
 	return 1; // Continue reading
 }
 
@@ -268,15 +290,7 @@ struct ReadGDXGlobalState : public GlobalTableFunctionState {
 };
 
 struct ReadGDXLocalState : public LocalTableFunctionState {
-	std::array<std::array<char, GMS_SSSIZE>, GMS_MAX_INDEX_DIM> key_buffer {};
-	std::array<char *, GMS_MAX_INDEX_DIM> key_ptrs {};
-	std::array<double, GMS_VAL_MAX> value_buffer {};
-
-	ReadGDXLocalState() {
-		for (idx_t i = 0; i < GMS_MAX_INDEX_DIM; ++i) {
-			key_ptrs[i] = key_buffer[i].data();
-		}
-	}
+	// Empty - all reads now use the buffered path via filtered_context
 };
 
 string NormalizeDimensionKey(const string &input) {
@@ -728,17 +742,35 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 		state->data_read_started = true;
 		state->data_read_finished = true; // gdxDataReadRawFastFilt calls gdxDataReadDone internally
 	} else {
-		// Original unfiltered read path
+		// Fast unfiltered read path using gdxDataReadRawFastEx + UEL cache
+		// This uses a callback to read all records at once, avoiding per-call overhead
+		state->use_filtered_read = true; // Reuse the same buffered read path
+		state->filtered_context = make_uniq<FilteredReadContext>();
+		state->filtered_context->handle = state->handle.get();
+		state->filtered_context->dimension = state->dimension;
+		state->filtered_context->resolved_path = state->resolved_path;
+		state->filtered_context->symbol = state->symbol;
+		state->filtered_context->total_records = bind.record_count;
+		
+		// Reserve approximate capacity to avoid reallocations
+		state->filtered_context->buffered_records.reserve(bind.record_count);
+		
+		// Execute fast unfiltered read - reads all records into buffer via callback
 		int nr_records = 0;
-		if (!gdxDataReadStrStart(state->handle.get(), state->symbol_index, &nr_records)) {
-			GDXErrorContext error_context("gdxDataReadStrStart");
+		int result = gdxDataReadRawFastEx(state->handle.get(), state->symbol_index,
+		                                   UnfilteredReadCallback, &nr_records,
+		                                   state->filtered_context.get());
+		
+		if (result == 0) {
+			GDXErrorContext error_context("gdxDataReadRawFastEx");
 			error_context.WithFile(state->resolved_path).WithSymbol(bind.symbol);
 			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
 		}
+		
+		state->filtered_context->read_complete = true;
+		state->record_count = state->filtered_context->buffered_records.size();
 		state->data_read_started = true;
-		if (bind.record_count == 0) {
-			state->record_count = nr_records < 0 ? 0 : static_cast<idx_t>(nr_records);
-		}
+		state->data_read_finished = true; // gdxDataReadRawFastEx calls gdxDataReadDone internally
 	}
 
 	return std::move(state);
@@ -788,7 +820,6 @@ void SetBooleanValue(Vector &vector, idx_t index, ReadGDXGlobalState &state, dou
 void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &output) {
 	auto &bind = input.bind_data->Cast<ReadGDXBindData>();
 	auto &state = input.global_state->Cast<ReadGDXGlobalState>();
-	auto &local = input.local_state->Cast<ReadGDXLocalState>();
 
 	if (state.data_exhausted) {
 		output.SetCardinality(0);
@@ -882,83 +913,6 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 
 		if (!state.filtered_context->HasMoreRecords()) {
 			state.data_exhausted = true;
-		}
-	} else {
-		// Original unfiltered read path
-		while (produced < target_count) {
-			int first_dim = 0;
-			int read_success = gdxDataReadStr(state.handle.get(), local.key_ptrs.data(), local.value_buffer.data(), &first_dim);
-			if (read_success == 0) {
-				state.data_exhausted = true;
-				break;
-			}
-
-			if (bind.has_dimension_filters) {
-				bool matches_filters = true;
-				for (idx_t filter_idx = 0; filter_idx < bind.dimension_filter_indices.size(); ++filter_idx) {
-					auto dim_index = bind.dimension_filter_indices[filter_idx];
-					if (dim_index >= bind.domain_column_count) {
-						continue;
-					}
-					string actual_value(local.key_buffer[dim_index].data());
-					StringUtil::Trim(actual_value);
-					if (!StringUtil::CIEquals(actual_value, bind.dimension_filter_values[filter_idx])) {
-						matches_filters = false;
-						break;
-					}
-				}
-				if (!matches_filters) {
-					continue;
-				}
-			}
-
-			for (idx_t col = 0; col < bind.domain_column_count; ++col) {
-				FlatVector::SetNull(output.data[col], produced, false);
-				domain_data[col][produced] = StringVector::AddString(output.data[col], local.key_buffer[col].data());
-			}
-
-			if (sparse_break_vector && dense_run_vector) {
-				if (first_dim <= 0) {
-					FlatVector::SetNull(*sparse_break_vector, produced, true);
-					FlatVector::SetNull(*dense_run_vector, produced, true);
-				} else {
-					bool sparse_break = first_dim == 1;
-					bool dense_run = first_dim > 1;
-					FlatVector::SetNull(*sparse_break_vector, produced, false);
-					FlatVector::GetData<bool>(*sparse_break_vector)[produced] = sparse_break;
-					FlatVector::SetNull(*dense_run_vector, produced, false);
-					FlatVector::GetData<bool>(*dense_run_vector)[produced] = dense_run;
-				}
-			}
-
-			for (idx_t value_idx = 0; value_idx < bind.value_column_count; ++value_idx) {
-				auto &definition = bind.value_columns[value_idx];
-				switch (definition.kind) {
-				case ValueColumnKind::SetMembership:
-					SetBooleanValue(*value_vectors[value_idx], produced, state, local.value_buffer[GMS_VAL_LEVEL], true);
-					break;
-				case ValueColumnKind::Level:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, local.value_buffer[GMS_VAL_LEVEL]);
-					break;
-				case ValueColumnKind::Marginal:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, local.value_buffer[GMS_VAL_MARGINAL]);
-					break;
-				case ValueColumnKind::Lower:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, local.value_buffer[GMS_VAL_LOWER]);
-					break;
-				case ValueColumnKind::Upper:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, local.value_buffer[GMS_VAL_UPPER]);
-					break;
-				case ValueColumnKind::Scale:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, local.value_buffer[GMS_VAL_SCALE]);
-					break;
-				case ValueColumnKind::RawValue:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, local.value_buffer[GMS_VAL_LEVEL]);
-					break;
-				}
-			}
-
-			produced++;
 		}
 	}
 
