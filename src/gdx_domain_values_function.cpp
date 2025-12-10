@@ -78,14 +78,17 @@ void ScanAndCacheDomainValues(ClientContext &context, const std::string &file_or
 		throw InvalidInputException("Symbol '%s' not found in GDX file", symbol);
 	}
 	
-	// Preload UEL table
+	// Preload UEL table using gdxUMUelGet (takes internal entry numbers directly)
+	// Note: Raw indices from gdxDataReadRaw are internal entry numbers, not user UEL numbers
 	int uel_count = 0, high_map = 0;
 	gdxUMUelInfo(handle.get(), &uel_count, &high_map);
 	
 	std::vector<std::string> uel_table(static_cast<size_t>(uel_count) + 1);
 	std::array<char, GMS_SSSIZE> uel_buffer {};
+	int uel_map = 0;
 	for (int i = 1; i <= uel_count; ++i) {
-		if (gdxGetUEL(handle.get(), i, uel_buffer.data())) {
+		// gdxUMUelGet takes an internal entry number (UelNr) and returns the UEL string
+		if (gdxUMUelGet(handle.get(), i, uel_buffer.data(), &uel_map)) {
 			uel_table[i] = std::string(uel_buffer.data());
 		} else {
 			uel_table[i] = std::to_string(i);
