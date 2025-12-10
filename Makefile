@@ -15,7 +15,7 @@ wasm_pre_build_step:
 # Clean cached duckdb_gdx extension files to avoid stale symbol issues
 wasm_clean_cache:
 	@echo "Cleaning cached duckdb_gdx extensions..."
-	@rm -rf ~/.duckdb/extensions/*gdx* 2>/dev/null || true
+	@rm -rf ~/.duckdb/extensions/ 2>/dev/null || true
 
 # Override wasm_eh to clean cache before building
 wasm_eh: wasm_clean_cache

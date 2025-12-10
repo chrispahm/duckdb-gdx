@@ -12,6 +12,20 @@
 
 #include "gdx_random_access.h"
 
+// Optional API (added in gdx core) to fetch symbol data offset.
+// Weak symbols don't work reliably in WASM, so disable this feature for Emscripten builds.
+// On native platforms with GCC/Clang, we can use weak symbols to check at runtime.
+#if defined(__EMSCRIPTEN__)
+#define HAS_GDX_SYMBOL_POSITION_CHECK 0
+#elif defined(__GNUC__) || defined(__clang__)
+extern "C" {
+__attribute__((weak)) int gdxSymbolPosition(TGXFileRec_t *gdx, int SyNr, int64_t *Position, int *Dimen, int *RecCnt);
+}
+#define HAS_GDX_SYMBOL_POSITION_CHECK 1
+#else
+#define HAS_GDX_SYMBOL_POSITION_CHECK 0
+#endif
+
 #include <algorithm>
 #include <array>
 
@@ -85,9 +99,24 @@ static std::shared_ptr<GDXMetadataEntry> LoadGDXMetadataInternal(GDXFileRandomAc
 		metadata.name = std::string(name_buffer.data());
 		metadata.type_code = type;
 		metadata.dimension_count = dimension < 0 ? 0 : static_cast<uint64_t>(dimension);
+		metadata.data_position = 0;
 		metadata.record_count = record_count < 0 ? 0 : static_cast<uint64_t>(record_count);
 		metadata.description = std::string(description_buffer.data());
 		metadata.symbol_index = sy_nr;
+
+		// Try to fetch the byte offset of the symbol data block when the API is available.
+#if HAS_GDX_SYMBOL_POSITION_CHECK
+		int64_t pos = 0;
+		int pos_dim = 0;
+		int pos_rec = 0;
+		if (gdxSymbolPosition != nullptr && gdxSymbolPosition(handle.get(), sy_nr, &pos, &pos_dim, &pos_rec)) {
+			metadata.data_position = pos < 0 ? 0 : static_cast<uint64_t>(pos);
+			// Trust record_count from SymbolInfoX by default; if positive from API, prefer that.
+			if (pos_rec > 0) {
+				metadata.record_count = static_cast<uint64_t>(pos_rec);
+			}
+		}
+#endif
 
 		if (dimension > 0) {
 			size_t dim = static_cast<size_t>(dimension);

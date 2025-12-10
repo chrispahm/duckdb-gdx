@@ -47,10 +47,8 @@ DUCKDB_EXTENSION_API void duckdb_gdx_force_domain_values_registration(duckdb::Da
 }
 
 DUCKDB_EXTENSION_API void duckdb_gdx_init(duckdb::DatabaseInstance &db) {
-	fprintf(stderr, "[GDX] duckdb_gdx_init called\n");
 	duckdb::DuckDB db_wrapper(db);
 	db_wrapper.LoadExtension<duckdb::DuckdbGdxExtension>();
-	fprintf(stderr, "[GDX] Extension loaded via LoadExtension\n");
 }
 
 DUCKDB_EXTENSION_API const char *duckdb_gdx_version() {

@@ -52,6 +52,11 @@ else()
     src/gdx_metadata_cache.cpp
     src/gdx_preload_pragma.cpp
   )
+  
+  # Sidecar feature requires nlohmann JSON, not available in WASM
+  if(NOT EMSCRIPTEN)
+    list(APPEND EXTENSION_SOURCES src/gdx_sidecar.cpp)
+  endif()
 endif()
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})

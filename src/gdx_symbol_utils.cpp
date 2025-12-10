@@ -12,7 +12,8 @@ namespace {
 
 const std::vector<ValueColumnDefinition> &GetSetValueColumns() {
 	static const std::vector<ValueColumnDefinition> columns = {
-		{"is_member", LogicalType::BOOLEAN, ValueColumnKind::SetMembership}
+		{"is_member", LogicalType::BOOLEAN, ValueColumnKind::SetMembership},
+		{"description", LogicalType::VARCHAR, ValueColumnKind::SetText}
 	};
 	return columns;
 }

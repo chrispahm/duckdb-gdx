@@ -57,8 +57,8 @@ struct DomainValuesLocalState : public LocalTableFunctionState {
 // Scan ALL dimensions for a symbol and cache them
 // This is O(n) where n = records, but only needs to run once per symbol
 void ScanAndCacheDomainValues(ClientContext &context, const std::string &file_or_url,
-                               const std::string &symbol, idx_t dimension_count,
-                               GDXMetadataEntry &metadata_entry) {
+							   const std::string &symbol, idx_t dimension_count,
+							   GDXMetadataEntry &metadata_entry) {
 	// Open file
 	GDXFileRandomAccessProvider provider;
 	provider.Initialize(context, file_or_url);
@@ -133,7 +133,15 @@ void ScanAndCacheDomainValues(ClientContext &context, const std::string &file_or
 	}
 	
 	// Store in cache
-	metadata_entry.domain_values_cache.SetCachedValues(symbol, std::move(all_dim_values));
+	metadata_entry.domain_values_cache.SetCachedValues(symbol, all_dim_values);
+
+	// Also persist on metadata entry so sidecar can pick it up
+	for (auto &sym : metadata_entry.symbols) {
+		if (StringUtil::CIEquals(sym.name, symbol)) {
+			sym.cached_domain_values = std::move(all_dim_values);
+			break;
+		}
+	}
 }
 
 unique_ptr<FunctionData> DomainValuesBind(ClientContext &context, TableFunctionBindInput &input,
@@ -231,11 +239,22 @@ unique_ptr<GlobalTableFunctionState> DomainValuesInitGlobal(ClientContext &conte
 	auto &bind = input.bind_data->Cast<DomainValuesBindData>();
 	auto state = make_uniq<DomainValuesGlobalState>();
 	
-	// Check if we have cached values for this symbol
+	// Check if we have cached values for this symbol (memory or persisted)
 	auto cached = bind.metadata->domain_values_cache.GetCachedValues(bind.symbol);
-	
+
 	if (!cached) {
-		// Not cached - scan and cache ALL dimensions for this symbol
+		// If metadata carries cached domain values (from sidecar), hydrate cache
+		for (auto &sym : bind.metadata->symbols) {
+			if (StringUtil::CIEquals(sym.name, bind.symbol) && !sym.cached_domain_values.empty()) {
+				bind.metadata->domain_values_cache.SetCachedValues(bind.symbol, sym.cached_domain_values);
+				break;
+			}
+		}
+		cached = bind.metadata->domain_values_cache.GetCachedValues(bind.symbol);
+	}
+
+	if (!cached) {
+		// Not cached anywhere - scan and cache ALL dimensions for this symbol
 		ScanAndCacheDomainValues(context, bind.file_or_url, bind.symbol, 
 		                         bind.dimension_count, *bind.metadata);
 		cached = bind.metadata->domain_values_cache.GetCachedValues(bind.symbol);

@@ -10,6 +10,7 @@ namespace gdx {
 
 enum class ValueColumnKind {
 	SetMembership,
+	SetText,
 	Level,
 	Marginal,
 	Lower,

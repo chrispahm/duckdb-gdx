@@ -16,10 +16,12 @@ struct GDXSymbolMetadata {
 	std::string name;
 	int32_t type_code {0};
 	uint64_t dimension_count {0};
+	uint64_t data_position {0};
 	uint64_t record_count {0};
 	std::string description;
 	std::vector<std::string> domain_labels;
 	int32_t symbol_index {0};
+	std::vector<std::vector<std::string>> cached_domain_values;
 };
 
 //! Cache of unique domain values per dimension for a symbol.
