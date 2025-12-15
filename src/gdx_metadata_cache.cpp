@@ -7,7 +7,7 @@
 // Sidecar feature requires nlohmann JSON which is not available in WASM builds
 #ifndef __EMSCRIPTEN__
 #include "gdx/gdx_sidecar.hpp"
-#define GDX_SIDECAR_ENABLED 1
+#define GDX_SIDECAR_ENABLED 0
 #else
 #define GDX_SIDECAR_ENABLED 0
 #endif

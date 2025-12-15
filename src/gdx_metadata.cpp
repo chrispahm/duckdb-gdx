@@ -21,7 +21,7 @@
 extern "C" {
 __attribute__((weak)) int gdxSymbolPosition(TGXFileRec_t *gdx, int SyNr, int64_t *Position, int *Dimen, int *RecCnt);
 }
-#define HAS_GDX_SYMBOL_POSITION_CHECK 1
+#define HAS_GDX_SYMBOL_POSITION_CHECK 0
 #else
 #define HAS_GDX_SYMBOL_POSITION_CHECK 0
 #endif
