@@ -9,4 +9,7 @@ test/python/__pycache__/
 .Rhistory
 node_modules/
 test/wasm/node_modules/
+test/data/gdx/FAO_trade_matrix_1986_2021.gdx
 .venv/
+.claude
+.env
