@@ -39,7 +39,7 @@ struct GDXSymbolsLocalState : public LocalTableFunctionState {
 };
 
 unique_ptr<FunctionData> GDXSymbolsBind(ClientContext &context, TableFunctionBindInput &input,
-	vector<LogicalType> &return_types, vector<string> &names) {
+                                        vector<LogicalType> &return_types, vector<string> &names) {
 	if (input.inputs.empty()) {
 		throw InvalidInputException("gdx_symbols requires a file_or_url argument");
 	}
@@ -56,7 +56,8 @@ unique_ptr<GlobalTableFunctionState> GDXSymbolsInitGlobal(ClientContext &, Table
 	return make_uniq<GDXSymbolsGlobalState>();
 }
 
-unique_ptr<LocalTableFunctionState> GDXSymbolsInitLocal(ExecutionContext &, TableFunctionInitInput &, GlobalTableFunctionState *) {
+unique_ptr<LocalTableFunctionState> GDXSymbolsInitLocal(ExecutionContext &, TableFunctionInitInput &,
+                                                        GlobalTableFunctionState *) {
 	return make_uniq<GDXSymbolsLocalState>();
 }
 

@@ -30,7 +30,7 @@ struct GDXSymbolDomainValuesCache {
 	mutable std::mutex mutex;
 	//! Map from symbol name (lowercase) to vector of unique values per dimension
 	std::unordered_map<std::string, std::vector<std::vector<std::string>>> symbol_domain_values;
-	
+
 	bool HasCachedValues(const std::string &symbol_name) const;
 	const std::vector<std::vector<std::string>> *GetCachedValues(const std::string &symbol_name) const;
 	void SetCachedValues(const std::string &symbol_name, std::vector<std::vector<std::string>> values);
@@ -40,7 +40,7 @@ struct GDXMetadataEntry {
 	std::string resolved_path;
 	bool is_remote {false};
 	std::vector<GDXSymbolMetadata> symbols;
-	
+
 	//! Cache for domain values - populated lazily on first request
 	GDXSymbolDomainValuesCache domain_values_cache;
 };

@@ -54,5 +54,4 @@ DUCKDB_EXTENSION_API void duckdb_gdx_init(duckdb::DatabaseInstance &db) {
 DUCKDB_EXTENSION_API const char *duckdb_gdx_version() {
 	return duckdb::DuckDB::LibraryVersion();
 }
-
 }

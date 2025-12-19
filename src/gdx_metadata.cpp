@@ -39,7 +39,8 @@ bool GDXSymbolDomainValuesCache::HasCachedValues(const std::string &symbol_name)
 	return symbol_domain_values.find(key) != symbol_domain_values.end();
 }
 
-const std::vector<std::vector<std::string>> *GDXSymbolDomainValuesCache::GetCachedValues(const std::string &symbol_name) const {
+const std::vector<std::vector<std::string>> *
+GDXSymbolDomainValuesCache::GetCachedValues(const std::string &symbol_name) const {
 	std::string key = StringUtil::Lower(symbol_name);
 	std::lock_guard<std::mutex> lock(mutex);
 	auto it = symbol_domain_values.find(key);
@@ -49,7 +50,8 @@ const std::vector<std::vector<std::string>> *GDXSymbolDomainValuesCache::GetCach
 	return &it->second;
 }
 
-void GDXSymbolDomainValuesCache::SetCachedValues(const std::string &symbol_name, std::vector<std::vector<std::string>> values) {
+void GDXSymbolDomainValuesCache::SetCachedValues(const std::string &symbol_name,
+                                                 std::vector<std::vector<std::string>> values) {
 	std::string key = StringUtil::Lower(symbol_name);
 	std::lock_guard<std::mutex> lock(mutex);
 	symbol_domain_values[key] = std::move(values);
@@ -58,7 +60,7 @@ void GDXSymbolDomainValuesCache::SetCachedValues(const std::string &symbol_name,
 namespace {
 
 static std::shared_ptr<GDXMetadataEntry> LoadGDXMetadataInternal(GDXFileRandomAccessProvider &provider,
-    UniqueGDXHandle &handle) {
+                                                                 UniqueGDXHandle &handle) {
 	auto entry = std::make_shared<GDXMetadataEntry>();
 	entry->resolved_path = provider.ResolvedPath().empty() ? provider.Location() : provider.ResolvedPath();
 	entry->is_remote = provider.IsRemote();

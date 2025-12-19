@@ -53,7 +53,8 @@ void RandomAccessAdapter::InitializeFromFileHandle(std::unique_ptr<FileHandle> n
 
 void RandomAccessAdapter::InitializeFromProvider(const gdx_random_access &provider) {
 	if (!provider.read_at || !provider.get_size) {
-		throw InvalidInputException("RandomAccessAdapter::InitializeFromProvider requires read_at and get_size callbacks");
+		throw InvalidInputException(
+		    "RandomAccessAdapter::InitializeFromProvider requires read_at and get_size callbacks");
 	}
 	Reset();
 	upstream_provider = provider;
@@ -176,7 +177,8 @@ int RandomAccessAdapter::ReadAt(uint64_t offset, void *dst, size_t requested, si
 				return 0;
 			}
 			size_t provider_read = 0;
-			auto success = upstream_provider.read_at(upstream_provider.user_data, offset, dst, requested, &provider_read);
+			auto success =
+			    upstream_provider.read_at(upstream_provider.user_data, offset, dst, requested, &provider_read);
 			if (!success) {
 				last_error = "Upstream random-access read failed";
 				return 0;

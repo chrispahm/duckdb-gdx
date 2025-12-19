@@ -60,7 +60,6 @@ namespace {
 
 using HttpHeaderList = std::vector<std::pair<std::string, std::string>>;
 
-
 class GlobalHeaderRegistry {
 public:
 	static GlobalHeaderRegistry &Get() {

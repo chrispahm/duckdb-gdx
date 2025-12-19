@@ -25,7 +25,7 @@ UniqueGDXHandle CreateGDXHandle(const std::string &system_directory) {
 		rc = gdxCreate(&raw_handle, message_buffer.data(), static_cast<int>(message_buffer.size()));
 	} else {
 		rc = gdxCreateD(&raw_handle, system_directory.c_str(), message_buffer.data(),
-		               static_cast<int>(message_buffer.size()));
+		                static_cast<int>(message_buffer.size()));
 	}
 
 	if (rc == 0 || !raw_handle) {

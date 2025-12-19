@@ -12,45 +12,39 @@ namespace {
 
 const std::vector<ValueColumnDefinition> &GetSetValueColumns() {
 	static const std::vector<ValueColumnDefinition> columns = {
-		{"is_member", LogicalType::BOOLEAN, ValueColumnKind::SetMembership},
-		{"description", LogicalType::VARCHAR, ValueColumnKind::SetText}
-	};
+	    {"is_member", LogicalType::BOOLEAN, ValueColumnKind::SetMembership},
+	    {"description", LogicalType::VARCHAR, ValueColumnKind::SetText}};
 	return columns;
 }
 
 const std::vector<ValueColumnDefinition> &GetParameterValueColumns() {
-	static const std::vector<ValueColumnDefinition> columns = {
-		{"value", LogicalType::DOUBLE, ValueColumnKind::Level}
-	};
+	static const std::vector<ValueColumnDefinition> columns = {{"value", LogicalType::DOUBLE, ValueColumnKind::Level}};
 	return columns;
 }
 
 const std::vector<ValueColumnDefinition> &GetVariableValueColumns() {
 	static const std::vector<ValueColumnDefinition> columns = {
-		{"level", LogicalType::DOUBLE, ValueColumnKind::Level},
-		{"marginal", LogicalType::DOUBLE, ValueColumnKind::Marginal},
-		{"lower", LogicalType::DOUBLE, ValueColumnKind::Lower},
-		{"upper", LogicalType::DOUBLE, ValueColumnKind::Upper},
-		{"scale", LogicalType::DOUBLE, ValueColumnKind::Scale}
-	};
+	    {"level", LogicalType::DOUBLE, ValueColumnKind::Level},
+	    {"marginal", LogicalType::DOUBLE, ValueColumnKind::Marginal},
+	    {"lower", LogicalType::DOUBLE, ValueColumnKind::Lower},
+	    {"upper", LogicalType::DOUBLE, ValueColumnKind::Upper},
+	    {"scale", LogicalType::DOUBLE, ValueColumnKind::Scale}};
 	return columns;
 }
 
 const std::vector<ValueColumnDefinition> &GetEquationValueColumns() {
 	static const std::vector<ValueColumnDefinition> columns = {
-		{"level", LogicalType::DOUBLE, ValueColumnKind::Level},
-		{"marginal", LogicalType::DOUBLE, ValueColumnKind::Marginal},
-		{"lower", LogicalType::DOUBLE, ValueColumnKind::Lower},
-		{"upper", LogicalType::DOUBLE, ValueColumnKind::Upper},
-		{"scale", LogicalType::DOUBLE, ValueColumnKind::Scale}
-	};
+	    {"level", LogicalType::DOUBLE, ValueColumnKind::Level},
+	    {"marginal", LogicalType::DOUBLE, ValueColumnKind::Marginal},
+	    {"lower", LogicalType::DOUBLE, ValueColumnKind::Lower},
+	    {"upper", LogicalType::DOUBLE, ValueColumnKind::Upper},
+	    {"scale", LogicalType::DOUBLE, ValueColumnKind::Scale}};
 	return columns;
 }
 
 const std::vector<ValueColumnDefinition> &GetFallbackValueColumns() {
 	static const std::vector<ValueColumnDefinition> columns = {
-		{"value", LogicalType::DOUBLE, ValueColumnKind::RawValue}
-	};
+	    {"value", LogicalType::DOUBLE, ValueColumnKind::RawValue}};
 	return columns;
 }
 
@@ -72,8 +66,8 @@ const std::vector<ValueColumnDefinition> &GetValueColumnDefinitions(int symbol_t
 }
 
 void BuildReadGDXSchema(const std::vector<std::string> &domain_labels, int symbol_type,
-						const std::vector<ValueColumnDefinition> &value_columns,
-						std::vector<LogicalType> &return_types, std::vector<std::string> &names) {
+                        const std::vector<ValueColumnDefinition> &value_columns, std::vector<LogicalType> &return_types,
+                        std::vector<std::string> &names) {
 	return_types.clear();
 	names.clear();
 

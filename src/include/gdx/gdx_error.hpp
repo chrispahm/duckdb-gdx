@@ -44,17 +44,14 @@ struct GDXErrorContext {
 	}
 };
 
-std::string FormatGDXErrorMessage(int error_code,
-                                  const GDXErrorContext &context = GDXErrorContext(),
+std::string FormatGDXErrorMessage(int error_code, const GDXErrorContext &context = GDXErrorContext(),
                                   ::gdx::TGXFileObj *handle = nullptr);
 
-[[noreturn]] void ThrowGDXError(int error_code,
-                                const GDXErrorContext &context = GDXErrorContext(),
+[[noreturn]] void ThrowGDXError(int error_code, const GDXErrorContext &context = GDXErrorContext(),
                                 ::gdx::TGXFileObj *handle = nullptr);
 
-inline void ThrowIfGDXError(int status_code,
-                             const GDXErrorContext &context = GDXErrorContext(),
-                             ::gdx::TGXFileObj *handle = nullptr) {
+inline void ThrowIfGDXError(int status_code, const GDXErrorContext &context = GDXErrorContext(),
+                            ::gdx::TGXFileObj *handle = nullptr) {
 	if (status_code != 0) {
 		ThrowGDXError(status_code, context, handle);
 	}

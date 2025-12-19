@@ -92,7 +92,7 @@ struct FilteredReadContext {
 	bool read_complete {false};
 	std::string resolved_path;
 	std::string symbol;
-	
+
 	// Progress tracking during scan
 	std::atomic<idx_t> records_scanned {0};
 	idx_t total_records {0}; // Set before scan starts
@@ -367,7 +367,7 @@ string NormalizeDimensionKey(const string &input) {
 }
 
 bool TryAddDimensionFilter(ReadGDXBindData &bind, const string &dimension_name, const string &raw_value,
-	                         const string &source) {
+                           const string &source) {
 	if (dimension_name.empty()) {
 		return false;
 	}
@@ -383,9 +383,9 @@ bool TryAddDimensionFilter(ReadGDXBindData &bind, const string &dimension_name, 
 	auto existing = bind.dimension_filters.find(normalized_key);
 	if (existing != bind.dimension_filters.end()) {
 		if (!StringUtil::CIEquals(existing->second.value, value)) {
-			throw InvalidInputException(
-			    "Conflicting filters for dimension '%s': %s requires '%s' but %s requires '%s'", dimension_name.c_str(),
-			    source.c_str(), value.c_str(), existing->second.source.c_str(), existing->second.value.c_str());
+			throw InvalidInputException("Conflicting filters for dimension '%s': %s requires '%s' but %s requires '%s'",
+			                            dimension_name.c_str(), source.c_str(), value.c_str(),
+			                            existing->second.source.c_str(), existing->second.value.c_str());
 		}
 		return false;
 	}
@@ -441,12 +441,13 @@ void PrepareDimensionFilters(ReadGDXBindData &bind) {
 		auto lookup = dimension_name_map.find(entry.first);
 		if (lookup == dimension_name_map.end()) {
 			throw InvalidInputException("Unknown dimension '%s' supplied via %s. Valid dimensions: %s",
-			                             entry.second.display_name.c_str(), entry.second.source.c_str(),
-			                             valid_dimensions_str.c_str());
+			                            entry.second.display_name.c_str(), entry.second.source.c_str(),
+			                            valid_dimensions_str.c_str());
 		}
 		auto dim_index = lookup->second;
 		if (!used_indices.insert(dim_index).second) {
-			throw InvalidInputException("Duplicate dimension filter supplied for '%s'", bind.column_names[dim_index].c_str());
+			throw InvalidInputException("Duplicate dimension filter supplied for '%s'",
+			                            bind.column_names[dim_index].c_str());
 		}
 		bind.dimension_filter_indices.push_back(dim_index);
 		bind.dimension_filter_values.push_back(entry.second.value);
@@ -460,7 +461,6 @@ void EnsureDimensionFiltersPrepared(ReadGDXBindData &bind) {
 		PrepareDimensionFilters(bind);
 	}
 }
-
 
 DimensionFilterMap ParseDimensionFilters(const Value &parameter) {
 	DimensionFilterMap filters;
@@ -495,8 +495,8 @@ DimensionFilterMap ParseDimensionFilters(const Value &parameter) {
 		if (trimmed_value.empty()) {
 			throw InvalidInputException("dimension_filters values must contain at least one non-whitespace character");
 		}
-		auto inserted = filters.emplace(normalized_key,
-		                                DimensionFilterEntry {trimmed_value, trimmed_key, "dimension_filters parameter"});
+		auto inserted = filters.emplace(
+		    normalized_key, DimensionFilterEntry {trimmed_value, trimmed_key, "dimension_filters parameter"});
 		if (!inserted.second) {
 			throw InvalidInputException("Duplicate dimension filter supplied for '%s'", key.ToString().c_str());
 		}
@@ -574,7 +574,7 @@ bool ExtractConstantString(Expression &expr, string &value) {
 }
 
 bool ExtractColumnConstantPair(Expression &left, Expression &right, LogicalGet &get, idx_t &column_index,
-	                           string &column_name, string &value) {
+                               string &column_name, string &value) {
 	if (ExtractColumnBinding(left, get, column_index, column_name) && ExtractConstantString(right, value)) {
 		return true;
 	}
@@ -625,7 +625,7 @@ bool ExtractFiltersFromExpression(Expression &expr, LogicalGet &get, ReadGDXBind
 }
 
 void ReadGDXPushdownComplexFilter(ClientContext &, LogicalGet &get, FunctionData *bind_data_p,
-	                               vector<unique_ptr<Expression>> &filters) {
+                                  vector<unique_ptr<Expression>> &filters) {
 	if (!bind_data_p) {
 		return;
 	}
@@ -645,7 +645,7 @@ void ReadGDXPushdownComplexFilter(ClientContext &, LogicalGet &get, FunctionData
 }
 
 unique_ptr<FunctionData> ReadGDXBind(ClientContext &context, TableFunctionBindInput &input,
-		 vector<LogicalType> &return_types, vector<string> &names) {
+                                     vector<LogicalType> &return_types, vector<string> &names) {
 	if (input.inputs.size() < 2) {
 		throw InvalidInputException("read_gdx requires a file_or_url and symbol argument");
 	}
@@ -675,8 +675,8 @@ unique_ptr<FunctionData> ReadGDXBind(ClientContext &context, TableFunctionBindIn
 	}
 
 	if (symbol_metadata->type_code == GMS_DT_ALIAS) {
-		throw InvalidInputException(StringUtil::Format("read_gdx does not support alias symbols: \"%s\"",
-		                                             symbol_metadata->name.c_str()));
+		throw InvalidInputException(
+		    StringUtil::Format("read_gdx does not support alias symbols: \"%s\"", symbol_metadata->name.c_str()));
 	}
 
 	bind_data->symbol_type = symbol_metadata->type_code;
@@ -721,14 +721,15 @@ unique_ptr<FunctionData> ReadGDXBind(ClientContext &context, TableFunctionBindIn
 		filtered_columns.reserve(bind_data->requested_value_columns.size());
 		std::unordered_set<std::string> seen;
 		for (auto &requested : bind_data->requested_value_columns) {
-			auto match = std::find_if(bind_data->value_columns.begin(), bind_data->value_columns.end(), [&](const ValueColumnDefinition &def) {
-				return def.name == requested;
-			});
+			auto match = std::find_if(bind_data->value_columns.begin(), bind_data->value_columns.end(),
+			                          [&](const ValueColumnDefinition &def) { return def.name == requested; });
 			if (match == bind_data->value_columns.end()) {
-				throw InvalidInputException("Unknown value column '%s' for symbol '%s'", requested.c_str(), bind_data->symbol.c_str());
+				throw InvalidInputException("Unknown value column '%s' for symbol '%s'", requested.c_str(),
+				                            bind_data->symbol.c_str());
 			}
 			if (!seen.insert(requested).second) {
-				throw InvalidInputException("Duplicate value column '%s' in value_columns parameter", requested.c_str());
+				throw InvalidInputException("Duplicate value column '%s' in value_columns parameter",
+				                            requested.c_str());
 			}
 			filtered_columns.push_back(*match);
 		}
@@ -811,7 +812,7 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 
 		// Prepare filter strings for gdxDataReadRawFastFilt
 		state->filtered_context->PrepareFilters(state->dimension, state->dimension_filter_indices,
-		                                         state->dimension_filter_values);
+		                                        state->dimension_filter_values);
 
 		// Set thread-local context for callback (gdxDataReadRawFastFilt doesn't pass Uptr correctly)
 		g_filtered_read_context = state->filtered_context.get();
@@ -822,8 +823,7 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 
 		// Execute filtered read - this reads until offset/limit satisfied
 		int result = gdxDataReadRawFastFilt(state->handle.get(), state->symbol_index,
-		                                     state->filtered_context->filter_ptrs.data(),
-		                                     FilteredReadCallback);
+		                                    state->filtered_context->filter_ptrs.data(), FilteredReadCallback);
 
 		// Clear thread-local context
 		g_filtered_read_context = nullptr;
@@ -852,26 +852,25 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 		state->filtered_context->skip_remaining = state->offset;
 		state->filtered_context->limit = state->limit;
 		state->filtered_context->has_limit = state->has_limit;
-		
+
 		// Reserve approximate capacity to avoid reallocations
 		if (state->has_limit) {
 			state->filtered_context->buffered_records.reserve(state->limit);
 		} else {
 			state->filtered_context->buffered_records.reserve(bind.record_count);
 		}
-		
+
 		// Execute fast unfiltered read - reads until offset/limit satisfied
 		int nr_records = 0;
-		int result = gdxDataReadRawFastEx(state->handle.get(), state->symbol_index,
-		                                   UnfilteredReadCallback, &nr_records,
-		                                   state->filtered_context.get());
-		
+		int result = gdxDataReadRawFastEx(state->handle.get(), state->symbol_index, UnfilteredReadCallback, &nr_records,
+		                                  state->filtered_context.get());
+
 		if (result == 0 && !state->filtered_context->stop_requested) {
 			GDXErrorContext error_context("gdxDataReadRawFastEx");
 			error_context.WithFile(state->resolved_path).WithSymbol(bind.symbol);
 			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
 		}
-		
+
 		state->filtered_context->read_complete = true;
 		state->record_count = state->filtered_context->buffered_records.size();
 		state->data_read_started = true;
@@ -881,7 +880,8 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 	return std::move(state);
 }
 
-unique_ptr<LocalTableFunctionState> ReadGDXInitLocal(ExecutionContext &, TableFunctionInitInput &, GlobalTableFunctionState *) {
+unique_ptr<LocalTableFunctionState> ReadGDXInitLocal(ExecutionContext &, TableFunctionInitInput &,
+                                                     GlobalTableFunctionState *) {
 	return make_uniq<ReadGDXLocalState>();
 }
 
@@ -998,8 +998,8 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 					std::string text = state.GetSetElementText(txt_nr);
 					FlatVector::SetNull(*value_vectors[value_idx], produced, text.empty());
 					if (!text.empty()) {
-						FlatVector::GetData<string_t>(*value_vectors[value_idx])[produced] = 
-							StringVector::AddString(*value_vectors[value_idx], text);
+						FlatVector::GetData<string_t>(*value_vectors[value_idx])[produced] =
+						    StringVector::AddString(*value_vectors[value_idx], text);
 					}
 					break;
 				}
@@ -1051,7 +1051,7 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 
 double ReadGDXProgress(ClientContext &, const FunctionData *bind_data_p, const GlobalTableFunctionState *gstate_p) {
 	auto &state = gstate_p->Cast<ReadGDXGlobalState>();
-	
+
 	// For filtered reads, we track progress during the callback scan
 	if (state.use_filtered_read && state.filtered_context) {
 		// After scan complete, progress is based on buffered records consumed
@@ -1059,7 +1059,7 @@ double ReadGDXProgress(ClientContext &, const FunctionData *bind_data_p, const G
 			if (state.filtered_context->buffered_records.empty()) {
 				return 1.0;
 			}
-			return static_cast<double>(state.filtered_context->current_record_index) / 
+			return static_cast<double>(state.filtered_context->current_record_index) /
 			       static_cast<double>(state.filtered_context->buffered_records.size());
 		}
 		// During scan, use the atomic counter for progress
@@ -1069,12 +1069,12 @@ double ReadGDXProgress(ClientContext &, const FunctionData *bind_data_p, const G
 		}
 		return -1.0; // Indeterminate if we don't know total
 	}
-	
+
 	// For unfiltered reads, progress is rows read / total records
 	if (state.record_count == 0) {
 		return 1.0; // No records = complete
 	}
-	return static_cast<double>(state.rows_read.load(std::memory_order_relaxed)) / 
+	return static_cast<double>(state.rows_read.load(std::memory_order_relaxed)) /
 	       static_cast<double>(state.record_count);
 }
 
@@ -1087,8 +1087,8 @@ void RegisterReadTableFunction(DatabaseInstance &db) {
 	function.init_local = ReadGDXInitLocal;
 	function.pushdown_complex_filter = ReadGDXPushdownComplexFilter;
 	function.table_scan_progress = ReadGDXProgress;
- 	function.named_parameters["dimension_filters"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
- 	function.named_parameters["value_columns"] = LogicalType::LIST(LogicalType::VARCHAR);
+	function.named_parameters["dimension_filters"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
+	function.named_parameters["value_columns"] = LogicalType::LIST(LogicalType::VARCHAR);
 	function.named_parameters["row_offset"] = LogicalType::BIGINT;
 	function.named_parameters["row_limit"] = LogicalType::BIGINT;
 

@@ -49,8 +49,7 @@ void GDXPreloadPragma(ClientContext &context, const FunctionParameters &paramete
 			}
 		}
 		if (!found) {
-			throw InvalidInputException("Symbol '%s' not found in '%s'", requested_symbol.c_str(),
-			                            file_or_url.c_str());
+			throw InvalidInputException("Symbol '%s' not found in '%s'", requested_symbol.c_str(), file_or_url.c_str());
 		}
 	}
 }

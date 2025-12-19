@@ -8,16 +8,7 @@
 namespace duckdb {
 namespace gdx {
 
-enum class ValueColumnKind {
-	SetMembership,
-	SetText,
-	Level,
-	Marginal,
-	Lower,
-	Upper,
-	Scale,
-	RawValue
-};
+enum class ValueColumnKind { SetMembership, SetText, Level, Marginal, Lower, Upper, Scale, RawValue };
 
 struct ValueColumnDefinition {
 	std::string name;
@@ -30,8 +21,8 @@ const std::vector<ValueColumnDefinition> &GetValueColumnDefinitions(int symbol_t
 
 //! Builds the output schema for read_gdx based on the domain labels and symbol type.
 void BuildReadGDXSchema(const std::vector<std::string> &domain_labels, int symbol_type,
-						 const std::vector<ValueColumnDefinition> &value_columns,
-						 std::vector<duckdb::LogicalType> &return_types, std::vector<std::string> &names);
+                        const std::vector<ValueColumnDefinition> &value_columns,
+                        std::vector<duckdb::LogicalType> &return_types, std::vector<std::string> &names);
 
 //! Builds the output schema for the gdx_symbols table function.
 void BuildGDXSymbolsSchema(std::vector<duckdb::LogicalType> &return_types, std::vector<std::string> &names);

@@ -20,10 +20,10 @@ public:
 	std::shared_ptr<const GDXMetadataEntry> Lookup(const std::string &resolved_path) const;
 
 	std::shared_ptr<GDXMetadataEntry> GetOrLoad(ClientContext &context, const std::string &file_or_url,
-	                                           bool force_reload = false);
+	                                            bool force_reload = false);
 
 	std::shared_ptr<GDXMetadataEntry> GetOrLoad(ClientContext &context, GDXFileRandomAccessProvider &provider,
-	                                           bool force_reload = false);
+	                                            bool force_reload = false);
 
 	void Invalidate(const std::string &resolved_path);
 

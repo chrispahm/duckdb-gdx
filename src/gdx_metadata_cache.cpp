@@ -31,15 +31,14 @@ std::shared_ptr<const GDXMetadataEntry> GDXMetadataCache::Lookup(const std::stri
 }
 
 std::shared_ptr<GDXMetadataEntry> GDXMetadataCache::GetOrLoad(ClientContext &context, const std::string &file_or_url,
-                                                             bool force_reload) {
+                                                              bool force_reload) {
 	GDXFileRandomAccessProvider provider;
 	provider.Initialize(context, file_or_url);
 	return GetOrLoad(context, provider, force_reload);
 }
 
-std::shared_ptr<GDXMetadataEntry> GDXMetadataCache::GetOrLoad(ClientContext &context,
-                                                             GDXFileRandomAccessProvider &provider,
-                                                             bool force_reload) {
+std::shared_ptr<GDXMetadataEntry>
+GDXMetadataCache::GetOrLoad(ClientContext &context, GDXFileRandomAccessProvider &provider, bool force_reload) {
 	auto resolved = provider.ResolvedPath().empty() ? provider.Location() : provider.ResolvedPath();
 
 #if GDX_SIDECAR_ENABLED
