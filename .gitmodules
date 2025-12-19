@@ -8,4 +8,5 @@
 	branch = main
 [submodule "gdx"]
 	path = gdx
-	url = /Users/pahmeyer/Documents/GitHub.nosync/gdx
+	url = https://github.com/chrispahm/gdx
+	branch = random-access
