@@ -55,15 +55,15 @@ def locate_extension_path() -> Path:
                     "Rebuild the extension with sanitizers disabled or point to an unsanitized artifact."
                 )
             return candidate
-        raise FileNotFoundError(
-            f"DUCKDB_GDX_EXTENSION_PATH is set to '{candidate}', but the file does not exist."
-        )
+        raise FileNotFoundError(f"DUCKDB_GDX_EXTENSION_PATH is set to '{candidate}', but the file does not exist.")
 
     def _is_supported_target(path: Path) -> bool:
         return not any("wasm" in part for part in path.parts)
 
     candidates = [
-        candidate for candidate in _iter_extension_candidates(REPO_ROOT) if candidate.is_file() and _is_supported_target(candidate)
+        candidate
+        for candidate in _iter_extension_candidates(REPO_ROOT)
+        if candidate.is_file() and _is_supported_target(candidate)
     ]
     if not candidates:
         raise FileNotFoundError(
@@ -190,6 +190,8 @@ def test_transport_gdx_metadata_and_data(duckdb_connection: duckdb.DuckDBPyConne
     assert filtered_rows == [(50.0, 0.0)]
     print("DuckDB GDX transport tests passed.")
 
+
 if __name__ == "__main__":
     import sys
+
     sys.exit(pytest.main(["-v", "-s", __file__]))

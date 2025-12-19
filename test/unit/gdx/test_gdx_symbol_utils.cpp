@@ -72,10 +72,8 @@ TEST_CASE("BuildReadGDXSchema applies overrides and deduplicates value columns",
 	std::vector<LogicalType> return_types;
 	std::vector<std::string> names;
 
-	std::vector<ValueColumnDefinition> overrides = {
-	    {"custom", LogicalType::INTEGER, ValueColumnKind::RawValue},
-	    {"custom", LogicalType::VARCHAR, ValueColumnKind::RawValue}
-	};
+	std::vector<ValueColumnDefinition> overrides = {{"custom", LogicalType::INTEGER, ValueColumnKind::RawValue},
+	                                                {"custom", LogicalType::VARCHAR, ValueColumnKind::RawValue}};
 
 	BuildReadGDXSchema(domain_labels, GMS_DT_SET, overrides, return_types, names);
 
