@@ -39,6 +39,10 @@ struct DomainValuesBindData : public TableFunctionData {
 	std::string dimension_name; // For error messages
 	// Pointer to cached metadata (for accessing domain values cache)
 	std::shared_ptr<GDXMetadataEntry> metadata;
+	// Optional dimension filters for cascading filter support
+	std::vector<idx_t> dimension_filter_indices;
+	std::vector<std::string> dimension_filter_values;
+	bool has_dimension_filters {false};
 };
 
 struct DomainValuesGlobalState : public GlobalTableFunctionState {
@@ -54,10 +58,13 @@ struct DomainValuesLocalState : public LocalTableFunctionState {
 	idx_t current_index {0};
 };
 
-// Scan ALL dimensions for a symbol and cache them
-// This is O(n) where n = records, but only needs to run once per symbol
+// Scan dimensions for a symbol with optional filtering
+// When filters are provided, only records matching the filters are scanned
+// This enables cascading filter behavior (e.g., selecting Country limits available Cities)
 void ScanAndCacheDomainValues(ClientContext &context, const std::string &file_or_url, const std::string &symbol,
-                              idx_t dimension_count, GDXMetadataEntry &metadata_entry) {
+                              idx_t dimension_count, GDXMetadataEntry &metadata_entry,
+                              const std::vector<idx_t> &filter_indices = {},
+                              const std::vector<std::string> &filter_values = {}) {
 	// Open file
 	GDXFileRandomAccessProvider provider;
 	provider.Initialize(context, file_or_url);
@@ -97,29 +104,154 @@ void ScanAndCacheDomainValues(ClientContext &context, const std::string &file_or
 	// Prepare sets for each dimension
 	std::vector<std::unordered_set<int>> unique_indices_per_dim(dimension_count);
 
-	// Scan all records, collecting unique UEL indices for ALL dimensions at once
-	int nr_records = 0;
-	if (!gdxDataReadRawStart(handle.get(), sym_nr, &nr_records)) {
-		gdxClose(handle.get());
-		GDXErrorContext error_context("gdxDataReadRawStart");
-		error_context.WithFile(file_or_url).WithSymbol(symbol);
-		ThrowGDXError(gdxGetLastError(handle.get()), error_context);
-	}
-
 	std::vector<int> key_buffer(dimension_count);
 	std::array<double, GMS_VAL_MAX> value_buffer {};
 	int afdim = 0;
 
-	while (gdxDataReadRaw(handle.get(), key_buffer.data(), value_buffer.data(), &afdim)) {
+	bool use_filtered_read = !filter_indices.empty() && filter_indices.size() == filter_values.size();
+
+	if (use_filtered_read) {
+		// Register UEL mappings for filter values
+		if (!gdxUELRegisterMapStart(handle.get())) {
+			gdxClose(handle.get());
+			GDXErrorContext error_context("gdxUELRegisterMapStart");
+			error_context.WithFile(file_or_url);
+			ThrowGDXError(gdxGetLastError(handle.get()), error_context);
+		}
+
+		std::unordered_map<std::string, int> uel_user_map;
+		int next_user_idx = 1;
+		for (const auto &filter_value : filter_values) {
+			if (!gdxUELRegisterMap(handle.get(), next_user_idx, filter_value.c_str())) {
+				gdxClose(handle.get());
+				GDXErrorContext error_context("gdxUELRegisterMap");
+				error_context.WithFile(file_or_url).WithSymbol(filter_value);
+				ThrowGDXError(gdxGetLastError(handle.get()), error_context);
+			}
+			uel_user_map[filter_value] = next_user_idx;
+			next_user_idx++;
+		}
+
+		if (!gdxUELRegisterDone(handle.get())) {
+			gdxClose(handle.get());
+			GDXErrorContext error_context("gdxUELRegisterDone");
+			error_context.WithFile(file_or_url);
+			ThrowGDXError(gdxGetLastError(handle.get()), error_context);
+		}
+
+		// Set up filter_actions array - default to DOMC_EXPAND for all dimensions
+		std::vector<int> filter_actions(dimension_count, ::gdx::DOMC_EXPAND);
+		int next_filter_nr = 1000;
+
+		// Register a filter for each dimension that has a filter value
+		for (size_t i = 0; i < filter_indices.size(); i++) {
+			int filter_nr = next_filter_nr++;
+			if (!gdxFilterRegisterStart(handle.get(), filter_nr)) {
+				gdxClose(handle.get());
+				GDXErrorContext error_context("gdxFilterRegisterStart");
+				error_context.WithFile(file_or_url);
+				ThrowGDXError(gdxGetLastError(handle.get()), error_context);
+			}
+
+			int user_idx = uel_user_map[filter_values[i]];
+			if (!gdxFilterRegister(handle.get(), user_idx)) {
+				gdxClose(handle.get());
+				GDXErrorContext error_context("gdxFilterRegister");
+				error_context.WithFile(file_or_url).WithSymbol(filter_values[i]);
+				ThrowGDXError(gdxGetLastError(handle.get()), error_context);
+			}
+
+			if (!gdxFilterRegisterDone(handle.get())) {
+				gdxClose(handle.get());
+				GDXErrorContext error_context("gdxFilterRegisterDone");
+				error_context.WithFile(file_or_url);
+				ThrowGDXError(gdxGetLastError(handle.get()), error_context);
+			}
+
+			if (filter_indices[i] < dimension_count) {
+				filter_actions[filter_indices[i]] = filter_nr;
+			}
+		}
+
+		// Start filtered read
+		int nr_records = 0;
+		if (!gdxDataReadFilteredStart(handle.get(), sym_nr, filter_actions.data(), &nr_records)) {
+			gdxClose(handle.get());
+			GDXErrorContext error_context("gdxDataReadFilteredStart");
+			error_context.WithFile(file_or_url).WithSymbol(symbol);
+			ThrowGDXError(gdxGetLastError(handle.get()), error_context);
+		}
+
+		// Read filtered records using gdxDataReadMap (indices are user-mapped)
+		// We'll collect them first, then translate using gdxUMUelGet
+		std::vector<std::unordered_set<int>> mapped_indices_per_dim(dimension_count);
+		while (gdxDataReadMap(handle.get(), 0, key_buffer.data(), value_buffer.data(), &afdim)) {
+			for (idx_t d = 0; d < dimension_count; ++d) {
+				mapped_indices_per_dim[d].insert(key_buffer[d]);
+			}
+		}
+		// Translate mapped indices to strings directly using gdxUMUelGet
+		std::array<char, GMS_SSSIZE> uel_buffer {};
+		int uel_map_out = 0;
 		for (idx_t d = 0; d < dimension_count; ++d) {
-			unique_indices_per_dim[d].insert(key_buffer[d]);
+			for (int mapped_idx : mapped_indices_per_dim[d]) {
+				if (gdxUMUelGet(handle.get(), mapped_idx, uel_buffer.data(), &uel_map_out)) {
+					unique_indices_per_dim[d].insert(mapped_idx);
+				}
+			}
+		}
+
+		// For filtered reads, collect strings separately since indices are user-mapped
+		gdxDataReadDone(handle.get());
+
+		// Convert mapped indices to sorted string vectors using gdxGetUEL
+		std::vector<std::vector<std::string>> all_dim_values(dimension_count);
+		std::array<char, GMS_SSSIZE> uel_buffer_filtered {};
+		for (idx_t d = 0; d < dimension_count; ++d) {
+			auto &indices = mapped_indices_per_dim[d];
+			auto &values = all_dim_values[d];
+			values.reserve(indices.size());
+
+			for (int idx : indices) {
+				// Use gdxGetUEL for user-mapped indices from gdxDataReadMap
+				if (gdxGetUEL(handle.get(), idx, uel_buffer_filtered.data())) {
+					values.push_back(std::string(uel_buffer_filtered.data()));
+				}
+			}
+			std::sort(values.begin(), values.end());
+		}
+
+		gdxClose(handle.get());
+
+		// Store directly in metadata for immediate use (don't cache since filter-specific)
+		for (auto &sym : metadata_entry.symbols) {
+			if (StringUtil::CIEquals(sym.name, symbol)) {
+				sym.cached_domain_values = std::move(all_dim_values);
+				break;
+			}
+		}
+		return;
+	} else {
+		// Unfiltered read path
+		int nr_records = 0;
+		if (!gdxDataReadRawStart(handle.get(), sym_nr, &nr_records)) {
+			gdxClose(handle.get());
+			GDXErrorContext error_context("gdxDataReadRawStart");
+			error_context.WithFile(file_or_url).WithSymbol(symbol);
+			ThrowGDXError(gdxGetLastError(handle.get()), error_context);
+		}
+
+		while (gdxDataReadRaw(handle.get(), key_buffer.data(), value_buffer.data(), &afdim)) {
+			for (idx_t d = 0; d < dimension_count; ++d) {
+				unique_indices_per_dim[d].insert(key_buffer[d]);
+			}
 		}
 	}
 
 	gdxDataReadDone(handle.get());
 	gdxClose(handle.get());
 
-	// Convert to sorted string vectors
+	// Convert to sorted string vectors (for unfiltered reads using raw indices)
 	std::vector<std::vector<std::string>> all_dim_values(dimension_count);
 	for (idx_t d = 0; d < dimension_count; ++d) {
 		auto &indices = unique_indices_per_dim[d];
@@ -134,14 +266,25 @@ void ScanAndCacheDomainValues(ClientContext &context, const std::string &file_or
 		std::sort(values.begin(), values.end());
 	}
 
-	// Store in cache
-	metadata_entry.domain_values_cache.SetCachedValues(symbol, all_dim_values);
+	// When filters are used, DON'T cache - results are filter-specific
+	// Store directly in metadata for immediate use
+	if (use_filtered_read) {
+		for (auto &sym : metadata_entry.symbols) {
+			if (StringUtil::CIEquals(sym.name, symbol)) {
+				sym.cached_domain_values = std::move(all_dim_values);
+				break;
+			}
+		}
+	} else {
+		// Store in cache for unfiltered results
+		metadata_entry.domain_values_cache.SetCachedValues(symbol, all_dim_values);
 
-	// Also persist on metadata entry so sidecar can pick it up
-	for (auto &sym : metadata_entry.symbols) {
-		if (StringUtil::CIEquals(sym.name, symbol)) {
-			sym.cached_domain_values = std::move(all_dim_values);
-			break;
+		// Also persist on metadata entry so sidecar can pick it up
+		for (auto &sym : metadata_entry.symbols) {
+			if (StringUtil::CIEquals(sym.name, symbol)) {
+				sym.cached_domain_values = std::move(all_dim_values);
+				break;
+			}
 		}
 	}
 }
@@ -228,6 +371,32 @@ unique_ptr<FunctionData> DomainValuesBind(ClientContext &context, TableFunctionB
 		bind_data->dimension_name = symbol_meta->domain_labels[bind_data->dimension_index];
 	}
 
+	// Optional: dimension_filters parameter for cascading filter support
+	auto filter_it = input.named_parameters.find("dimension_filters");
+	if (filter_it != input.named_parameters.end()) {
+		auto &filter_map = filter_it->second;
+		if (filter_map.type().id() == LogicalTypeId::MAP) {
+			auto map_children = MapValue::GetChildren(filter_map);
+			for (auto &entry : map_children) {
+				auto kv = StructValue::GetChildren(entry);
+				if (kv.size() == 2) {
+					std::string dim_name = kv[0].ToString();
+					std::string filter_value = kv[1].ToString();
+
+					// Resolve dimension name to index
+					for (idx_t i = 0; i < symbol_meta->domain_labels.size(); ++i) {
+						if (StringUtil::CIEquals(symbol_meta->domain_labels[i], dim_name)) {
+							bind_data->dimension_filter_indices.push_back(i);
+							bind_data->dimension_filter_values.push_back(filter_value);
+							break;
+						}
+					}
+				}
+			}
+			bind_data->has_dimension_filters = !bind_data->dimension_filter_indices.empty();
+		}
+	}
+
 	// Output schema: single column with the dimension values
 	names.push_back("value");
 	return_types.push_back(LogicalType::VARCHAR);
@@ -238,6 +407,22 @@ unique_ptr<FunctionData> DomainValuesBind(ClientContext &context, TableFunctionB
 unique_ptr<GlobalTableFunctionState> DomainValuesInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
 	auto &bind = input.bind_data->Cast<DomainValuesBindData>();
 	auto state = make_uniq<DomainValuesGlobalState>();
+
+	// When dimension filters are present, always scan (results are filter-specific, not cached)
+	if (bind.has_dimension_filters) {
+		ScanAndCacheDomainValues(context, bind.file_or_url, bind.symbol, bind.dimension_count, *bind.metadata,
+		                         bind.dimension_filter_indices, bind.dimension_filter_values);
+		// Get values from metadata (not cached, just stored temporarily)
+		for (auto &sym : bind.metadata->symbols) {
+			if (StringUtil::CIEquals(sym.name, bind.symbol) && !sym.cached_domain_values.empty()) {
+				if (bind.dimension_index < sym.cached_domain_values.size()) {
+					state->cached_values = &sym.cached_domain_values[bind.dimension_index];
+				}
+				break;
+			}
+		}
+		return std::move(state);
+	}
 
 	// Check if we have cached values for this symbol (memory or persisted)
 	auto cached = bind.metadata->domain_values_cache.GetCachedValues(bind.symbol);
@@ -298,6 +483,7 @@ void DomainValuesFunction(ClientContext &, TableFunctionInput &input, DataChunk 
 __attribute__((used)) void RegisterGDXDomainValuesFunction(DatabaseInstance &db) {
 	// gdx_domain_values(file, symbol, dimension) -> returns all unique values for that dimension
 	// First call scans and caches ALL dimensions, subsequent calls are instant
+	// Optional: dimension_filters parameter for cascading filter support
 
 	fprintf(stderr, "[GDX] Registering gdx_domain_values function\n");
 
@@ -308,6 +494,9 @@ __attribute__((used)) void RegisterGDXDomainValuesFunction(DatabaseInstance &db)
 	function.init_global = DomainValuesInitGlobal;
 	function.init_local = DomainValuesInitLocal;
 	function.projection_pushdown = false;
+
+	// Register named parameters
+	function.named_parameters["dimension_filters"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
 
 	ExtensionUtil::RegisterFunction(db, function);
 	fprintf(stderr, "[GDX] Registered gdx_domain_values function done\n");

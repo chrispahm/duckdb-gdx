@@ -8,6 +8,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -249,7 +250,18 @@ struct ReadGDXGlobalState : public GlobalTableFunctionState {
 	bool has_offset {false};
 	bool has_limit {false};
 
-	// For filtered reading using gdxDataReadRawFastFilt
+	// Streaming read state (replaces buffered FilteredReadContext)
+	bool streaming_active {false};
+	idx_t rows_skipped {0};     // For offset handling during streaming
+	idx_t rows_emitted {0};     // For limit handling during streaming
+
+	// Filter registration state for gdxDataReadFilteredStart
+	std::vector<int> filter_actions;              // DOMC_EXPAND or filter_nr per dimension
+	int next_filter_nr {1000};                    // Counter for unique filter IDs
+	std::unordered_map<std::string, int> uel_user_map;  // UEL string -> user index for filter registration
+	int next_user_idx {1};
+
+	// Legacy buffered read support (will be removed after streaming is verified)
 	bool use_filtered_read {false};
 	std::unique_ptr<FilteredReadContext> filtered_context;
 
@@ -257,6 +269,7 @@ struct ReadGDXGlobalState : public GlobalTableFunctionState {
 	// This is populated once at file open time for O(1) lookups
 	std::vector<std::string> uel_table;
 	bool uel_table_loaded {false};
+
 
 	// Preload the entire UEL table into memory for fast lookups
 	// Note: Raw indices from gdxDataReadRawFastEx callbacks are internal entry numbers,
@@ -536,21 +549,45 @@ Expression *StripCasts(Expression &expr) {
 
 bool ExtractColumnBinding(Expression &expr, LogicalGet &get, idx_t &column_index, string &column_name) {
 	auto *node = StripCasts(expr);
-	if (node->expression_class != ExpressionClass::BOUND_REF) {
+	
+	// Handle BOUND_REF (used in local scope)
+	if (node->expression_class == ExpressionClass::BOUND_REF) {
+		auto &ref = node->Cast<BoundReferenceExpression>();
+		const auto &column_ids = get.GetColumnIds();
+		if (ref.index < 0 || static_cast<idx_t>(ref.index) >= column_ids.size()) {
+			return false;
+		}
+		auto physical_index = column_ids[ref.index].GetPrimaryIndex();
+		if (physical_index >= get.names.size()) {
+			return false;
+		}
+		column_index = physical_index;
+		column_name = get.names[physical_index];
+		return true;
+	}
+	
+	// Handle BOUND_COLUMN_REF (used in column references from queries)
+	if (node->expression_class == ExpressionClass::BOUND_COLUMN_REF) {
+		auto &col_ref = node->Cast<BoundColumnRefExpression>();
+		// Find the column in the table by matching the column binding
+		for (idx_t i = 0; i < get.names.size(); i++) {
+			const auto &column_ids = get.GetColumnIds();
+			// Check if any column_id maps to this position
+			for (idx_t j = 0; j < column_ids.size(); j++) {
+				if (column_ids[j].GetPrimaryIndex() == i) {
+					// Check if binding matches (table_index should be the table index from get)
+					if (col_ref.binding.column_index == j) {
+						column_index = i;
+						column_name = get.names[i];
+						return true;
+					}
+				}
+			}
+		}
 		return false;
 	}
-	auto &ref = node->Cast<BoundReferenceExpression>();
-	const auto &column_ids = get.GetColumnIds();
-	if (ref.index < 0 || static_cast<idx_t>(ref.index) >= column_ids.size()) {
-		return false;
-	}
-	auto physical_index = column_ids[ref.index].GetPrimaryIndex();
-	if (physical_index >= get.names.size()) {
-		return false;
-	}
-	column_index = physical_index;
-	column_name = get.names[physical_index];
-	return true;
+	
+	return false;
 }
 
 bool ExtractConstantString(Expression &expr, string &value) {
@@ -633,6 +670,7 @@ void ReadGDXPushdownComplexFilter(ClientContext &, LogicalGet &get, FunctionData
 	if (bind.domain_column_count == 0) {
 		return;
 	}
+	
 	bool added_filters = false;
 	for (auto &expr : filters) {
 		if (expr) {
@@ -796,85 +834,87 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 	}
 	state->symbol_type = symbol_type;
 
-	// Use filtered read path when dimension filters are present
+	// Use streaming read path - prepare read but don't buffer any records
+	// Records will be read incrementally in ReadGDXFunction
 	if (state->has_dimension_filters && !state->dimension_filter_indices.empty()) {
-		state->use_filtered_read = true;
-		state->filtered_context = make_uniq<FilteredReadContext>();
-		state->filtered_context->handle = state->handle.get();
-		state->filtered_context->dimension = state->dimension;
-		state->filtered_context->resolved_path = state->resolved_path;
-		state->filtered_context->symbol = state->symbol;
-		state->filtered_context->total_records = bind.record_count; // For progress tracking
-		state->filtered_context->offset = state->offset;
-		state->filtered_context->skip_remaining = state->offset;
-		state->filtered_context->limit = state->limit;
-		state->filtered_context->has_limit = state->has_limit;
-
-		// Prepare filter strings for gdxDataReadRawFastFilt
-		state->filtered_context->PrepareFilters(state->dimension, state->dimension_filter_indices,
-		                                        state->dimension_filter_values);
-
-		// Set thread-local context for callback (gdxDataReadRawFastFilt doesn't pass Uptr correctly)
-		g_filtered_read_context = state->filtered_context.get();
-
-		if (state->has_limit) {
-			state->filtered_context->buffered_records.reserve(state->limit);
+		// Register UEL mappings for filter values
+		if (!gdxUELRegisterMapStart(state->handle.get())) {
+			GDXErrorContext error_context("gdxUELRegisterMapStart");
+			error_context.WithFile(state->resolved_path);
+			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
 		}
 
-		// Execute filtered read - this reads until offset/limit satisfied
-		int result = gdxDataReadRawFastFilt(state->handle.get(), state->symbol_index,
-		                                    state->filtered_context->filter_ptrs.data(), FilteredReadCallback);
+		// Map each filter value to a user index
+		for (const auto &filter_value : state->dimension_filter_values) {
+			if (!gdxUELRegisterMap(state->handle.get(), state->next_user_idx, filter_value.c_str())) {
+				GDXErrorContext error_context("gdxUELRegisterMap");
+				error_context.WithFile(state->resolved_path).WithSymbol(filter_value);
+				ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
+			}
+			state->uel_user_map[filter_value] = state->next_user_idx;
+			state->next_user_idx++;
+		}
 
-		// Clear thread-local context
-		g_filtered_read_context = nullptr;
+		if (!gdxUELRegisterDone(state->handle.get())) {
+			GDXErrorContext error_context("gdxUELRegisterDone");
+			error_context.WithFile(state->resolved_path);
+			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
+		}
 
-		if (result == 0 && !state->filtered_context->stop_requested) {
-			GDXErrorContext error_context("gdxDataReadRawFastFilt");
+		// Set up filter_actions array - default to DOMC_EXPAND for all dimensions
+		state->filter_actions.resize(state->dimension, ::gdx::DOMC_EXPAND);
+
+		// Register a filter for each dimension that has a filter value
+		for (size_t i = 0; i < state->dimension_filter_indices.size(); i++) {
+			int filter_nr = state->next_filter_nr++;
+			if (!gdxFilterRegisterStart(state->handle.get(), filter_nr)) {
+				GDXErrorContext error_context("gdxFilterRegisterStart");
+				error_context.WithFile(state->resolved_path);
+				ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
+			}
+
+			// Register the UEL that should pass the filter
+			int user_idx = state->uel_user_map[state->dimension_filter_values[i]];
+			if (!gdxFilterRegister(state->handle.get(), user_idx)) {
+				GDXErrorContext error_context("gdxFilterRegister");
+				error_context.WithFile(state->resolved_path).WithSymbol(state->dimension_filter_values[i]);
+				ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
+			}
+
+			if (!gdxFilterRegisterDone(state->handle.get())) {
+				GDXErrorContext error_context("gdxFilterRegisterDone");
+				error_context.WithFile(state->resolved_path);
+				ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
+			}
+
+			// Set this dimension to use the filter
+			state->filter_actions[state->dimension_filter_indices[i]] = filter_nr;
+		}
+
+		// Start filtered read (does NOT read any records yet - streaming mode)
+		int nr_recs = 0;
+		if (!gdxDataReadFilteredStart(state->handle.get(), state->symbol_index,
+		                               state->filter_actions.data(), &nr_recs)) {
+			GDXErrorContext error_context("gdxDataReadFilteredStart");
 			error_context.WithFile(state->resolved_path).WithSymbol(bind.symbol);
 			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
 		}
 
-		state->filtered_context->read_complete = true;
-		state->record_count = state->filtered_context->buffered_records.size();
+		state->streaming_active = true;
 		state->data_read_started = true;
-		state->data_read_finished = true; // gdxDataReadRawFastFilt calls gdxDataReadDone internally
+		// Note: record_count is now an estimate (max possible, not accounting for filter matches)
 	} else {
-		// Fast unfiltered read path using gdxDataReadRawFastEx + UEL cache
-		// This uses a callback to read all records at once, avoiding per-call overhead
-		state->use_filtered_read = true; // Reuse the same buffered read path
-		state->filtered_context = make_uniq<FilteredReadContext>();
-		state->filtered_context->handle = state->handle.get();
-		state->filtered_context->dimension = state->dimension;
-		state->filtered_context->resolved_path = state->resolved_path;
-		state->filtered_context->symbol = state->symbol;
-		state->filtered_context->total_records = bind.record_count;
-		state->filtered_context->offset = state->offset;
-		state->filtered_context->skip_remaining = state->offset;
-		state->filtered_context->limit = state->limit;
-		state->filtered_context->has_limit = state->has_limit;
-
-		// Reserve approximate capacity to avoid reallocations
-		if (state->has_limit) {
-			state->filtered_context->buffered_records.reserve(state->limit);
-		} else {
-			state->filtered_context->buffered_records.reserve(bind.record_count);
-		}
-
-		// Execute fast unfiltered read - reads until offset/limit satisfied
-		int nr_records = 0;
-		int result = gdxDataReadRawFastEx(state->handle.get(), state->symbol_index, UnfilteredReadCallback, &nr_records,
-		                                  state->filtered_context.get());
-
-		if (result == 0 && !state->filtered_context->stop_requested) {
-			GDXErrorContext error_context("gdxDataReadRawFastEx");
+		// Unfiltered streaming read path using gdxDataReadRawStart
+		int nr_recs = 0;
+		if (!gdxDataReadRawStart(state->handle.get(), state->symbol_index, &nr_recs)) {
+			GDXErrorContext error_context("gdxDataReadRawStart");
 			error_context.WithFile(state->resolved_path).WithSymbol(bind.symbol);
 			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
 		}
 
-		state->filtered_context->read_complete = true;
-		state->record_count = state->filtered_context->buffered_records.size();
+		state->streaming_active = true;
 		state->data_read_started = true;
-		state->data_read_finished = true; // gdxDataReadRawFastEx calls gdxDataReadDone internally
+		state->record_count = static_cast<idx_t>(nr_recs);
 	}
 
 	return std::move(state);
@@ -931,18 +971,7 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 		return;
 	}
 
-	idx_t rows_remaining = state.record_count > state.rows_read ? state.record_count - state.rows_read : 0;
-	if (rows_remaining == 0) {
-		state.data_exhausted = true;
-		state.FinishReading(true);
-		state.CloseHandle(true);
-		output.SetCardinality(0);
-		return;
-	}
-
-	idx_t target_count = std::min<idx_t>(STANDARD_VECTOR_SIZE, rows_remaining);
-	idx_t produced = 0;
-
+	// Prepare output vector pointers
 	std::vector<string_t *> domain_data;
 	domain_data.reserve(bind.domain_column_count);
 	for (idx_t col = 0; col < bind.domain_column_count; ++col) {
@@ -962,27 +991,74 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 		value_vectors.push_back(&output.data[bind.value_column_offset + i]);
 	}
 
-	// Filtered read path: read from buffered records (already filtered by GDX)
-	if (state.use_filtered_read && state.filtered_context) {
-		while (produced < target_count && state.filtered_context->HasMoreRecords()) {
-			auto *record = state.filtered_context->GetNextRecord();
-			if (!record) {
+	// Streaming read path - read records directly from GDX, one at a time
+	idx_t produced = 0;
+	std::vector<int> key_int(state.dimension);
+	std::array<double, GMS_VAL_MAX> values {};
+	int dim_frst = 0;
+
+	if (state.streaming_active) {
+		while (produced < STANDARD_VECTOR_SIZE) {
+			// Read next record using appropriate function
+			bool has_record;
+			if (state.has_dimension_filters && !state.dimension_filter_indices.empty()) {
+				// Filtered read using gdxDataReadMap (after gdxDataReadFilteredStart)
+				// Returns user-mapped indices which we'll translate using gdxUMUelGet
+				has_record = gdxDataReadMap(state.handle.get(), 0, key_int.data(), values.data(), &dim_frst);
+			} else {
+				// Unfiltered read using gdxDataReadRaw (after gdxDataReadRawStart)
+				// Returns raw indices which work with our preloaded UEL table
+				has_record = gdxDataReadRaw(state.handle.get(), key_int.data(), values.data(), &dim_frst);
+			}
+
+			if (!has_record) {
+				state.data_exhausted = true;
 				break;
 			}
 
-			// Convert raw UEL indices to strings using cached lookups
-			for (idx_t col = 0; col < bind.domain_column_count && col < record->raw_indices.size(); ++col) {
-				int uel_nr = record->raw_indices[col];
-				const std::string &uel_str = state.GetUELString(uel_nr);
+			// Handle offset (skip first N rows)
+			if (state.rows_skipped < state.offset) {
+				state.rows_skipped++;
+				continue;
+			}
+
+			// Handle limit (stop after N rows)
+			if (state.has_limit && state.rows_emitted >= state.limit) {
+				state.data_exhausted = true;
+				break;
+			}
+
+			// Convert UEL indices to strings
+			// For filtered reads, gdxDataReadMap returns user-mapped indices;
+			// For unfiltered reads, gdxDataReadRaw returns raw indices
+			for (idx_t col = 0; col < bind.domain_column_count && col < state.dimension; ++col) {
+				int uel_nr = key_int[col];
+				std::string uel_str;
+				if (state.has_dimension_filters && !state.dimension_filter_indices.empty()) {
+					// User-mapped indices from gdxDataReadMap - use gdxGetUEL
+					std::array<char, GMS_SSSIZE> uel_buffer {};
+					if (gdxGetUEL(state.handle.get(), uel_nr, uel_buffer.data())) {
+						uel_str = std::string(uel_buffer.data());
+					} else {
+						uel_str = std::to_string(uel_nr);
+					}
+				} else {
+					// Raw indices from gdxDataReadRaw - use preloaded table
+					uel_str = state.GetUELString(uel_nr);
+				}
 				FlatVector::SetNull(output.data[col], produced, false);
 				domain_data[col][produced] = StringVector::AddString(output.data[col], uel_str);
 			}
 
-			// Metadata columns (sparse/dense indicators) - set to null for filtered reads
-			// since we don't have first_dim info from callback
+			// Metadata columns (sparse/dense indicators)
 			if (sparse_break_vector && dense_run_vector) {
-				FlatVector::SetNull(*sparse_break_vector, produced, true);
-				FlatVector::SetNull(*dense_run_vector, produced, true);
+				// dim_frst indicates which dimension changed first (1-based, 0 means all same)
+				bool is_sparse_break = (dim_frst > 0 && dim_frst <= 1);
+				bool is_dense_run = (dim_frst == 0 || dim_frst > 1);
+				FlatVector::SetNull(*sparse_break_vector, produced, false);
+				FlatVector::SetNull(*dense_run_vector, produced, false);
+				FlatVector::GetData<bool>(*sparse_break_vector)[produced] = is_sparse_break;
+				FlatVector::GetData<bool>(*dense_run_vector)[produced] = is_dense_run;
 			}
 
 			// Value columns
@@ -990,11 +1066,11 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 				auto &definition = bind.value_columns[value_idx];
 				switch (definition.kind) {
 				case ValueColumnKind::SetMembership:
-					SetBooleanValue(*value_vectors[value_idx], produced, state, record->values[GMS_VAL_LEVEL], true);
+					SetBooleanValue(*value_vectors[value_idx], produced, state, values[GMS_VAL_LEVEL], true);
 					break;
 				case ValueColumnKind::SetText: {
 					// For sets, the level value is an index into the text table
-					int txt_nr = static_cast<int>(record->values[GMS_VAL_LEVEL]);
+					int txt_nr = static_cast<int>(values[GMS_VAL_LEVEL]);
 					std::string text = state.GetSetElementText(txt_nr);
 					FlatVector::SetNull(*value_vectors[value_idx], produced, text.empty());
 					if (!text.empty()) {
@@ -1004,31 +1080,28 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 					break;
 				}
 				case ValueColumnKind::Level:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, record->values[GMS_VAL_LEVEL]);
+					SetDoubleValue(*value_vectors[value_idx], produced, state, values[GMS_VAL_LEVEL]);
 					break;
 				case ValueColumnKind::Marginal:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, record->values[GMS_VAL_MARGINAL]);
+					SetDoubleValue(*value_vectors[value_idx], produced, state, values[GMS_VAL_MARGINAL]);
 					break;
 				case ValueColumnKind::Lower:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, record->values[GMS_VAL_LOWER]);
+					SetDoubleValue(*value_vectors[value_idx], produced, state, values[GMS_VAL_LOWER]);
 					break;
 				case ValueColumnKind::Upper:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, record->values[GMS_VAL_UPPER]);
+					SetDoubleValue(*value_vectors[value_idx], produced, state, values[GMS_VAL_UPPER]);
 					break;
 				case ValueColumnKind::Scale:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, record->values[GMS_VAL_SCALE]);
+					SetDoubleValue(*value_vectors[value_idx], produced, state, values[GMS_VAL_SCALE]);
 					break;
 				case ValueColumnKind::RawValue:
-					SetDoubleValue(*value_vectors[value_idx], produced, state, record->values[GMS_VAL_LEVEL]);
+					SetDoubleValue(*value_vectors[value_idx], produced, state, values[GMS_VAL_LEVEL]);
 					break;
 				}
 			}
 
 			produced++;
-		}
-
-		if (!state.filtered_context->HasMoreRecords()) {
-			state.data_exhausted = true;
+			state.rows_emitted++;
 		}
 	}
 
@@ -1043,7 +1116,7 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 	state.rows_read += produced;
 	output.SetCardinality(produced);
 
-	if (state.data_exhausted || state.rows_read >= state.record_count) {
+	if (state.data_exhausted) {
 		state.FinishReading(true);
 		state.CloseHandle(true);
 	}
@@ -1052,9 +1125,17 @@ void ReadGDXFunction(ClientContext &, TableFunctionInput &input, DataChunk &outp
 double ReadGDXProgress(ClientContext &, const FunctionData *bind_data_p, const GlobalTableFunctionState *gstate_p) {
 	auto &state = gstate_p->Cast<ReadGDXGlobalState>();
 
-	// For filtered reads, we track progress during the callback scan
+	// For streaming reads, progress is based on rows emitted vs record count
+	if (state.streaming_active) {
+		if (state.record_count == 0) {
+			return 1.0; // No records = complete
+		}
+		// For filtered reads, record_count is an upper bound, so progress may jump
+		return static_cast<double>(state.rows_emitted) / static_cast<double>(state.record_count);
+	}
+
+	// Legacy buffered read progress (will be removed)
 	if (state.use_filtered_read && state.filtered_context) {
-		// After scan complete, progress is based on buffered records consumed
 		if (state.filtered_context->read_complete) {
 			if (state.filtered_context->buffered_records.empty()) {
 				return 1.0;
@@ -1062,17 +1143,16 @@ double ReadGDXProgress(ClientContext &, const FunctionData *bind_data_p, const G
 			return static_cast<double>(state.filtered_context->current_record_index) /
 			       static_cast<double>(state.filtered_context->buffered_records.size());
 		}
-		// During scan, use the atomic counter for progress
 		if (state.filtered_context->total_records > 0) {
 			idx_t scanned = state.filtered_context->records_scanned.load(std::memory_order_relaxed);
 			return static_cast<double>(scanned) / static_cast<double>(state.filtered_context->total_records);
 		}
-		return -1.0; // Indeterminate if we don't know total
+		return -1.0;
 	}
 
 	// For unfiltered reads, progress is rows read / total records
 	if (state.record_count == 0) {
-		return 1.0; // No records = complete
+		return 1.0;
 	}
 	return static_cast<double>(state.rows_read.load(std::memory_order_relaxed)) /
 	       static_cast<double>(state.record_count);

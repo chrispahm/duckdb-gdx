@@ -59,6 +59,30 @@ server.listen(PORT, async () => {
   const gdxBytes = new Uint8Array(gdxBuffer.buffer, gdxBuffer.byteOffset, gdxBuffer.byteLength);
   await db.registerFileBuffer('fao_trade.gdx', gdxBytes);
 
+  // performance test: read the first 10000 rows
+  const performanceQuery = `
+    SELECT * FROM read_gdx('fao_trade.gdx', 'p_faoTradeMatrix')
+    LIMIT 10000
+  `;
+  const startPerformance = performance.now();
+  const resultPerformance = await conn.query(performanceQuery);
+  const elapsedPerformance = performance.now() - startPerformance;
+  console.log(`Performance query took ${elapsedPerformance.toFixed(2)} ms`);
+  console.log(`Rows: ${resultPerformance.numRows}`);
+  console.log(resultPerformance.toArray());
+
+  // now test the performance for the next 10k rows
+  const performanceQuery2 = `
+    SELECT * FROM read_gdx('fao_trade.gdx', 'p_faoTradeMatrix')
+    LIMIT 10000 OFFSET 10000
+  `;
+  const startPerformance2 = performance.now();
+  const resultPerformance2 = await conn.query(performanceQuery2);
+  const elapsedPerformance2 = performance.now() - startPerformance2;
+  console.log(`Performance query took ${elapsedPerformance2.toFixed(2)} ms`);
+  console.log(`Rows: ${resultPerformance2.numRows}`);
+  console.log(resultPerformance2.toArray());
+
   // Optimized query using dimension_filters parameter (filter pushdown to GDX level)
   const optimizedQuery = `
     SELECT * FROM read_gdx('fao_trade.gdx', 'p_faoTradeMatrix',
