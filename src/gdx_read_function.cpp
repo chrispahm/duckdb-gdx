@@ -22,7 +22,6 @@
 #undef NO_SET_LOAD_PATH_DEF
 #include "gdx/gdx_metadata_cache.hpp"
 #include "gdx/gdx_symbol_utils.hpp"
-#include "duckdb/main/extension_util.hpp"
 
 #include "gclgms.h"
 
@@ -1160,7 +1159,7 @@ double ReadGDXProgress(ClientContext &, const FunctionData *bind_data_p, const G
 
 } // namespace
 
-void RegisterReadTableFunction(DatabaseInstance &db) {
+void RegisterReadTableFunction(ExtensionLoader &loader) {
 	auto function = TableFunction("read_gdx", {LogicalType::VARCHAR, LogicalType::VARCHAR}, ReadGDXFunction);
 	function.bind = ReadGDXBind;
 	function.init_global = ReadGDXInitGlobal;
@@ -1172,7 +1171,7 @@ void RegisterReadTableFunction(DatabaseInstance &db) {
 	function.named_parameters["row_offset"] = LogicalType::BIGINT;
 	function.named_parameters["row_limit"] = LogicalType::BIGINT;
 
-	ExtensionUtil::RegisterFunction(db, function);
+	loader.RegisterFunction(function);
 }
 
 } // namespace gdx

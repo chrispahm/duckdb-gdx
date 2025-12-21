@@ -4,7 +4,6 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/pragma_function.hpp"
-#include "duckdb/main/extension_util.hpp"
 
 #include "gdx/gdx_metadata_cache.hpp"
 
@@ -56,11 +55,11 @@ void GDXPreloadPragma(ClientContext &context, const FunctionParameters &paramete
 
 } // namespace
 
-void RegisterPreloadPragma(DatabaseInstance &db) {
+void RegisterPreloadPragma(ExtensionLoader &loader) {
 	auto pragma = PragmaFunction::PragmaCall("gdx_preload", GDXPreloadPragma, {LogicalType::VARCHAR}, LogicalType::ANY);
 	pragma.named_parameters["symbol"] = LogicalType::VARCHAR;
 	pragma.named_parameters["force_reload"] = LogicalType::BOOLEAN;
-	ExtensionUtil::RegisterFunction(db, pragma);
+	loader.RegisterFunction(pragma);
 }
 
 } // namespace gdx

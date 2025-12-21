@@ -1,11 +1,11 @@
 #pragma once
 
-namespace duckdb {
-class DatabaseInstance;
+#include "duckdb.hpp"
 
+namespace duckdb {
 namespace gdx {
 
-void RegisterPreloadPragma(DatabaseInstance &db);
+void RegisterPreloadPragma(ExtensionLoader &loader);
 
 } // namespace gdx
 } // namespace duckdb

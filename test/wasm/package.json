@@ -12,6 +12,6 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
-    "@duckdb/duckdb-wasm": "^1.30.0"
+    "@duckdb/duckdb-wasm": "^1.32.0"
   }
 }

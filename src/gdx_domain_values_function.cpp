@@ -5,7 +5,7 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/main/extension_util.hpp"
+
 #include "duckdb/execution/execution_context.hpp"
 
 #include "gdx/gdx_error.hpp"
@@ -480,7 +480,7 @@ void DomainValuesFunction(ClientContext &, TableFunctionInput &input, DataChunk 
 
 } // namespace
 
-__attribute__((used)) void RegisterGDXDomainValuesFunction(DatabaseInstance &db) {
+__attribute__((used)) void RegisterGDXDomainValuesFunction(ExtensionLoader &loader) {
 	// gdx_domain_values(file, symbol, dimension) -> returns all unique values for that dimension
 	// First call scans and caches ALL dimensions, subsequent calls are instant
 	// Optional: dimension_filters parameter for cascading filter support
@@ -498,7 +498,7 @@ __attribute__((used)) void RegisterGDXDomainValuesFunction(DatabaseInstance &db)
 	// Register named parameters
 	function.named_parameters["dimension_filters"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
 
-	ExtensionUtil::RegisterFunction(db, function);
+	loader.RegisterFunction(function);
 	fprintf(stderr, "[GDX] Registered gdx_domain_values function done\n");
 }
 

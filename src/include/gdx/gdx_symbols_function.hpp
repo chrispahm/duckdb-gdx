@@ -6,7 +6,7 @@ namespace duckdb {
 namespace gdx {
 
 //! Register the gdx_symbols table function with DuckDB.
-void RegisterSymbolsTableFunction(DatabaseInstance &db);
+void RegisterSymbolsTableFunction(ExtensionLoader &loader);
 
 } // namespace gdx
 } // namespace duckdb
