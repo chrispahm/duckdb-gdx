@@ -75,12 +75,14 @@ if(NOT MINIMAL_WASM_DEBUG)
     ${CMAKE_CURRENT_SOURCE_DIR}/gdx/src
     ${CMAKE_CURRENT_SOURCE_DIR}/gdx/generated
     ${CMAKE_CURRENT_SOURCE_DIR}/gdx/src/gdlib
+    ${CMAKE_CURRENT_SOURCE_DIR}/gdx/zlib
   )
 
   target_include_directories(${LOADABLE_EXTENSION_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/gdx/src
     ${CMAKE_CURRENT_SOURCE_DIR}/gdx/generated
     ${CMAKE_CURRENT_SOURCE_DIR}/gdx/src/gdlib
+    ${CMAKE_CURRENT_SOURCE_DIR}/gdx/zlib
   )
 endif()
 
