@@ -190,7 +190,30 @@ async function run(): Promise<void> {
         assertEqual(parameterRows.length, 1, 'Expected a single result row when summing transport parameter values');
         assertEqual(parameterRows[0]?.total, 950, 'Unexpected sum for parameter a in transport.gdx');
         console.log('read_gdx test passed!');
+
+        // Regression test: same UEL filtered on two different dimensions
+        const cocoSourcePath = '/Users/pahmeyer/Documents/GitHub.nosync/gdx-viewer/src/test/coco2_outputorg_290825.gdx';
+        const cocoVirtualPath = 'test/data/gdx/coco2_outputorg_290825.gdx';
+        const cocoBuffer = await fs.readFile(cocoSourcePath);
+        const cocoBytes = new Uint8Array(cocoBuffer.buffer, cocoBuffer.byteOffset, cocoBuffer.byteLength);
+        await db.registerFileBuffer(cocoVirtualPath, cocoBytes);
+
+        const uelConflictRegressionResult = await connection.query(
+          `SELECT value
+           FROM read_gdx('${cocoVirtualPath}','DATA2')
+           WHERE dim_1='BL000000' AND STATUS='INI' AND cols_all='SWHE' AND rows_all='SWHE' AND dim_5='2019'`
+        );
+        const uelConflictRegressionRows = uelConflictRegressionResult.toArray();
+
+        if (!Array.isArray(uelConflictRegressionRows)) {
+          throw new Error('Expected read_gdx(DATA2) regression query to return an array of rows');
+        }
+        console.log('read_gdx UEL conflict regression test passed!');
         
+        // log extension versions
+        const result = await connection.query(`SELECT extension_name, extension_version FROM duckdb_extensions()`);
+        console.log(result.toArray());
+
         console.log('All tests passed!');
       });
     } finally {
