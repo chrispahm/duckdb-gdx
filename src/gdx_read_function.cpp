@@ -842,17 +842,18 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 			error_context.WithFile(state->resolved_path);
 			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
 		}
-
-		// Map each filter value to a user index
-		for (const auto &filter_value : state->dimension_filter_values) {
-			if (!gdxUELRegisterMap(state->handle.get(), state->next_user_idx, filter_value.c_str())) {
-				GDXErrorContext error_context("gdxUELRegisterMap");
-				error_context.WithFile(state->resolved_path).WithSymbol(filter_value);
-				ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
-			}
-			state->uel_user_map[filter_value] = state->next_user_idx;
-			state->next_user_idx++;
-		}
+                for (const auto &filter_value : state->dimension_filter_values) {
+                        if (state->uel_user_map.find(filter_value) != state->uel_user_map.end()) {
+                                continue;
+                        }
+                        if (!gdxUELRegisterMap(state->handle.get(), state->next_user_idx, filter_value.c_str())) {
+                                GDXErrorContext error_context("gdxUELRegisterMap");
+                                error_context.WithFile(state->resolved_path).WithSymbol(filter_value);
+                                ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
+                        }
+                        state->uel_user_map[filter_value] = state->next_user_idx;
+                        state->next_user_idx++;
+                }
 
 		if (!gdxUELRegisterDone(state->handle.get())) {
 			GDXErrorContext error_context("gdxUELRegisterDone");
