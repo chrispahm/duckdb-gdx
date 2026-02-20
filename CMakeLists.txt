@@ -9,17 +9,6 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 project(${TARGET_NAME})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/include)
 
-# Workaround for GCC 14+ / ld 2.41+ with DuckDB unity builds:
-# constexpr static members (e.g. LogicalType::VARCHAR) get emitted as strong symbols in
-# DuckDB's unity translation units and as COMDAT symbols in separately-compiled extension
-# object files.  The linker rejects the duplication.  --allow-multiple-definition lets the
-# linker merge these identical definitions, which is safe because they originate from the
-# same inline constexpr declarations.
-if(NOT APPLE AND NOT WIN32 AND NOT EMSCRIPTEN AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--allow-multiple-definition" CACHE STRING "" FORCE)
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--allow-multiple-definition" CACHE STRING "" FORCE)
-endif()
-
 set(NO_TESTS ON CACHE BOOL "Skip building unit tests" FORCE)
 set(NO_EXAMPLES ON CACHE BOOL "Skip building example programs/executables" FORCE)
 set(NO_TOOLS ON CACHE BOOL "Skip building GDX tools" FORCE)
