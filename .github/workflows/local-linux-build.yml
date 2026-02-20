@@ -1,0 +1,39 @@
+#
+# Local Linux build workflow for running with `act`
+# Usage: act -j linux-build -W .github/workflows/local-linux-build.yml --container-architecture linux/amd64
+#
+name: Local Linux Build
+
+on:
+  push:
+
+jobs:
+  linux-build:
+    name: Linux amd64 Build
+    runs-on: ubuntu-latest
+    env:
+      GEN: ninja
+      DUCKDB_PLATFORM: linux_amd64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y cmake ninja-build git build-essential curl zip unzip tar pkg-config python3
+
+      - name: Checkout DuckDB to version
+        run: |
+          DUCKDB_GIT_VERSION=v1.4.3 make set_duckdb_version
+
+      - name: Build extension
+        run: |
+          make release
+
+      - name: Test extension
+        run: |
+          make test_release
