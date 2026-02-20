@@ -1,8 +1,5 @@
 PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-# Ensure the python bin directory is in PATH so the correct clang-format is found
-export PATH := $(shell python3 -c 'import sys, os; print(os.path.dirname(sys.executable))'):$(PATH)
-
 # Configuration of extension
 EXT_NAME=duckdb_gdx
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
