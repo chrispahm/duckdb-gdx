@@ -105,7 +105,7 @@ statement error
 SELECT COUNT(*)
 FROM read_gdx('test/data/gdx/missing.gdx', 'd');
 ----
-Unable to open 'test/data/gdx/missing.gdx' for GDX random access: {"exception_type":"IO","exception_message":"Cannot open file \"test/data/gdx/missing.gdx\": No such file or directory","errno":"2"}
+Unable to open 'test/data/gdx/missing.gdx' for GDX random access
 
 query I
 SELECT COUNT(*)
