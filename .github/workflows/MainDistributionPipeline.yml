@@ -23,7 +23,9 @@ jobs:
       #   against GCC 14's libstdc++ ABI but links against system GCC 8's libstdc++,
       #   causing undefined references. Upstream Docker image issue.
       # linux_amd64_musl: upstream Dockerfile has broken 'apk update --y' command.
-      exclude_archs: 'linux_arm64;linux_amd64_musl'
+      # windows_amd64_mingw: C++17 std::byte conflicts with rpcndr.h byte typedef
+      #   in MinGW/rtools headers. _HAS_STD_BYTE=0 fix is MSVC-only.
+      exclude_archs: 'linux_arm64;linux_amd64_musl;windows_amd64_mingw'
 
   code-quality-check:
     name: Code Quality Check
