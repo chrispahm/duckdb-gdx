@@ -45,4 +45,3 @@ DUCKDB_CPP_EXTENSION_ENTRY(duckdb_gdx, loader) {
 	duckdb::LoadInternal(loader);
 }
 }
-

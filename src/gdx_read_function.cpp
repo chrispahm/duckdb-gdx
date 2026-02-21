@@ -251,13 +251,13 @@ struct ReadGDXGlobalState : public GlobalTableFunctionState {
 
 	// Streaming read state (replaces buffered FilteredReadContext)
 	bool streaming_active {false};
-	idx_t rows_skipped {0};     // For offset handling during streaming
-	idx_t rows_emitted {0};     // For limit handling during streaming
+	idx_t rows_skipped {0}; // For offset handling during streaming
+	idx_t rows_emitted {0}; // For limit handling during streaming
 
 	// Filter registration state for gdxDataReadFilteredStart
-	std::vector<int> filter_actions;              // DOMC_EXPAND or filter_nr per dimension
-	int next_filter_nr {1000};                    // Counter for unique filter IDs
-	std::unordered_map<std::string, int> uel_user_map;  // UEL string -> user index for filter registration
+	std::vector<int> filter_actions;                   // DOMC_EXPAND or filter_nr per dimension
+	int next_filter_nr {1000};                         // Counter for unique filter IDs
+	std::unordered_map<std::string, int> uel_user_map; // UEL string -> user index for filter registration
 	int next_user_idx {1};
 
 	// Legacy buffered read support (will be removed after streaming is verified)
@@ -268,7 +268,6 @@ struct ReadGDXGlobalState : public GlobalTableFunctionState {
 	// This is populated once at file open time for O(1) lookups
 	std::vector<std::string> uel_table;
 	bool uel_table_loaded {false};
-
 
 	// Preload the entire UEL table into memory for fast lookups
 	// Note: Raw indices from gdxDataReadRawFastEx callbacks are internal entry numbers,
@@ -548,7 +547,7 @@ Expression *StripCasts(Expression &expr) {
 
 bool ExtractColumnBinding(Expression &expr, LogicalGet &get, idx_t &column_index, string &column_name) {
 	auto *node = StripCasts(expr);
-	
+
 	// Handle BOUND_REF (used in local scope)
 	if (node->expression_class == ExpressionClass::BOUND_REF) {
 		auto &ref = node->Cast<BoundReferenceExpression>();
@@ -564,7 +563,7 @@ bool ExtractColumnBinding(Expression &expr, LogicalGet &get, idx_t &column_index
 		column_name = get.names[physical_index];
 		return true;
 	}
-	
+
 	// Handle BOUND_COLUMN_REF (used in column references from queries)
 	if (node->expression_class == ExpressionClass::BOUND_COLUMN_REF) {
 		auto &col_ref = node->Cast<BoundColumnRefExpression>();
@@ -585,7 +584,7 @@ bool ExtractColumnBinding(Expression &expr, LogicalGet &get, idx_t &column_index
 		}
 		return false;
 	}
-	
+
 	return false;
 }
 
@@ -669,7 +668,7 @@ void ReadGDXPushdownComplexFilter(ClientContext &, LogicalGet &get, FunctionData
 	if (bind.domain_column_count == 0) {
 		return;
 	}
-	
+
 	bool added_filters = false;
 	for (auto &expr : filters) {
 		if (expr) {
@@ -842,18 +841,18 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 			error_context.WithFile(state->resolved_path);
 			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
 		}
-                for (const auto &filter_value : state->dimension_filter_values) {
-                        if (state->uel_user_map.find(filter_value) != state->uel_user_map.end()) {
-                                continue;
-                        }
-                        if (!gdxUELRegisterMap(state->handle.get(), state->next_user_idx, filter_value.c_str())) {
-                                GDXErrorContext error_context("gdxUELRegisterMap");
-                                error_context.WithFile(state->resolved_path).WithSymbol(filter_value);
-                                ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
-                        }
-                        state->uel_user_map[filter_value] = state->next_user_idx;
-                        state->next_user_idx++;
-                }
+		for (const auto &filter_value : state->dimension_filter_values) {
+			if (state->uel_user_map.find(filter_value) != state->uel_user_map.end()) {
+				continue;
+			}
+			if (!gdxUELRegisterMap(state->handle.get(), state->next_user_idx, filter_value.c_str())) {
+				GDXErrorContext error_context("gdxUELRegisterMap");
+				error_context.WithFile(state->resolved_path).WithSymbol(filter_value);
+				ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
+			}
+			state->uel_user_map[filter_value] = state->next_user_idx;
+			state->next_user_idx++;
+		}
 
 		if (!gdxUELRegisterDone(state->handle.get())) {
 			GDXErrorContext error_context("gdxUELRegisterDone");
@@ -893,8 +892,8 @@ unique_ptr<GlobalTableFunctionState> ReadGDXInitGlobal(ClientContext &context, T
 
 		// Start filtered read (does NOT read any records yet - streaming mode)
 		int nr_recs = 0;
-		if (!gdxDataReadFilteredStart(state->handle.get(), state->symbol_index,
-		                               state->filter_actions.data(), &nr_recs)) {
+		if (!gdxDataReadFilteredStart(state->handle.get(), state->symbol_index, state->filter_actions.data(),
+		                              &nr_recs)) {
 			GDXErrorContext error_context("gdxDataReadFilteredStart");
 			error_context.WithFile(state->resolved_path).WithSymbol(bind.symbol);
 			ThrowGDXError(gdxGetLastError(state->handle.get()), error_context);
