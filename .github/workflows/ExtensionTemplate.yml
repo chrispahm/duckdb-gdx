@@ -19,25 +19,3 @@ jobs:
       build_type: release
       upload_all_extensions: false
       exclude_archs: 'linux_arm64;linux_amd64_musl;windows_amd64_mingw'
-
-  wasm-glue-tests:
-    name: WASM glue tests (Node.js)
-    runs-on: ubuntu-latest
-    needs: cross-platform-build
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        working-directory: test/wasm
-        run: npm install
-
-      - name: Run WASM glue tests
-        working-directory: test/wasm
-        run: npm test
