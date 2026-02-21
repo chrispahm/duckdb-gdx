@@ -14,7 +14,7 @@ EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 # "multiple definition" errors when the same symbol exists in both libduckdb_static.a
 # and extension .a files.
 #
-# Three fixes are applied via the cmake command line (EXT_FLAGS) since the extension
+# Fixes are applied via the cmake command line (EXT_FLAGS) since the extension
 # CMakeLists.txt is processed too late (DuckDB core targets are already configured):
 #
 # 1. CMAKE_CXX_STANDARD=17: Makes static constexpr members implicitly inline variables.
@@ -28,9 +28,18 @@ EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 # 3. --allow-multiple-definition (Linux only): Tells the GNU linker to accept the first
 #    definition and silently ignore duplicates, as a safety net for any remaining
 #    strong-symbol conflicts.
+#
+# 4. _HAS_STD_BYTE=0 (Windows only): C++17 introduces std::byte which conflicts with
+#    the Windows SDK's 'typedef unsigned char byte' in rpcndr.h, causing C2872 ambiguous
+#    symbol errors. This disables std::byte in MSVC's standard library headers.
 EXT_FLAGS=-DCMAKE_CXX_STANDARD=17 -DDISABLE_UNITY=1
 ifeq ($(shell uname -s),Linux)
 EXT_FLAGS += -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-multiple-definition" -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--allow-multiple-definition"
+endif
+# C++17 introduces std::byte which conflicts with Windows SDK's 'typedef unsigned char byte'
+# in rpcndr.h. Disable std::byte on MSVC to resolve the ambiguous symbol error.
+ifeq ($(OS),Windows_NT)
+EXT_FLAGS += -DCMAKE_CXX_FLAGS="-D_HAS_STD_BYTE=0"
 endif
 
 # Include the Makefile from extension-ci-tools
