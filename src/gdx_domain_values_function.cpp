@@ -480,7 +480,7 @@ void DomainValuesFunction(ClientContext &, TableFunctionInput &input, DataChunk 
 
 } // namespace
 
-__attribute__((used)) void RegisterGDXDomainValuesFunction(ExtensionLoader &loader) {
+void RegisterGDXDomainValuesFunction(ExtensionLoader &loader) {
 	// gdx_domain_values(file, symbol, dimension) -> returns all unique values for that dimension
 	// First call scans and caches ALL dimensions, subsequent calls are instant
 	// Optional: dimension_filters parameter for cascading filter support
