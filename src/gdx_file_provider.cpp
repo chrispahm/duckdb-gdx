@@ -11,10 +11,31 @@
 #include "duckdb/main/client_context.hpp"
 
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace duckdb {
 namespace gdx {
+
+namespace {
+// DuckDB v1.5 replaced FileSystem::NormalizeAbsolutePath with CanonicalizePath
+template <typename FS, typename = void>
+struct has_canonicalize_path : std::false_type {};
+
+template <typename FS>
+struct has_canonicalize_path<FS,
+    std::void_t<decltype(std::declval<FS &>().CanonicalizePath(std::declval<const std::string &>()))>>
+    : std::true_type {};
+
+template <typename FS>
+std::string resolve_local_path(FS &fs, const std::string &path) {
+	if constexpr (has_canonicalize_path<FS>::value) {
+		return fs.CanonicalizePath(path);
+	} else {
+		return fs.NormalizeAbsolutePath(path);
+	}
+}
+} // anonymous namespace
 
 void GDXFileRandomAccessProvider::Reset() {
 	adapter.Reset();
@@ -41,7 +62,7 @@ void GDXFileRandomAccessProvider::Initialize(ClientContext &context, const std::
 	std::string open_path = file_or_url;
 	if (!is_remote) {
 		try {
-			resolved_path = fs.NormalizeAbsolutePath(file_or_url);
+			resolved_path = resolve_local_path(fs, file_or_url);
 			open_path = resolved_path;
 		} catch (const Exception &) {
 			resolved_path = file_or_url;
