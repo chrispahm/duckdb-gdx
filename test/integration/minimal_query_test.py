@@ -9,9 +9,7 @@ import duckdb
 gdx_path = (
     "/Users/pahmeyer/Documents/GitHub.nosync/capri-course/model250512114725/dat/fao/FAO_trade_matrix_1986_2021.gdx"
 )
-extension_path = (
-    "/Users/pahmeyer/Documents/GitHub.nosync/duckdb-gdx/build/release/extension/gdx/gdx.duckdb_extension"
-)
+extension_path = "/Users/pahmeyer/Documents/GitHub.nosync/duckdb-gdx/build/release/extension/gdx/gdx.duckdb_extension"
 
 conn = duckdb.connect(config={"allow_unsigned_extensions": True})
 conn.execute(f"LOAD '{extension_path}'")
