@@ -75,7 +75,7 @@ std::string MakeTempFilePath() {
 	std::mt19937_64 gen(rd());
 	std::uniform_int_distribution<int64_t> dist(0, std::numeric_limits<int64_t>::max());
 	auto random_id = dist(gen);
-	auto filename = StringUtil::Format("duckdb_gdx_random_access_%lld.bin", static_cast<long long>(random_id));
+	auto filename = StringUtil::Format("gdx_random_access_%lld.bin", static_cast<long long>(random_id));
 	return fs->JoinPath(base_dir, filename);
 }
 } // namespace

@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-class DuckdbGdxExtension : public Extension {
+class GdxExtension : public Extension {
 public:
 	void Load(ExtensionLoader &loader) override;
 	std::string Name() override;

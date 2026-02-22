@@ -41,11 +41,11 @@ bool InitializeWasmRandomAccess(RandomAccessAdapter &, const std::string &) {
 
 extern "C" {
 
-EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_set_http_header(const char *, const char *) {
+EMSCRIPTEN_KEEPALIVE void gdx_wasm_set_http_header(const char *, const char *) {
 	// No-op when HTTP is disabled
 }
 
-EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_clear_http_headers() {
+EMSCRIPTEN_KEEPALIVE void gdx_wasm_clear_http_headers() {
 	// No-op when HTTP is disabled
 }
 
@@ -404,14 +404,14 @@ bool InitializeWasmRandomAccess(RandomAccessAdapter &adapter, const std::string 
 
 extern "C" {
 
-EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_set_http_header(const char *name, const char *value) {
+EMSCRIPTEN_KEEPALIVE void gdx_wasm_set_http_header(const char *name, const char *value) {
 	if (!name) {
 		return;
 	}
 	GlobalHeaderRegistry::Get().Set(name, value ? value : "");
 }
 
-EMSCRIPTEN_KEEPALIVE void duckdb_gdx_wasm_clear_http_headers() {
+EMSCRIPTEN_KEEPALIVE void gdx_wasm_clear_http_headers() {
 	GlobalHeaderRegistry::Get().Clear();
 }
 

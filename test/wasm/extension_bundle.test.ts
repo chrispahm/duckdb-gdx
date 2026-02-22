@@ -29,12 +29,12 @@ class RecordingModule implements DuckDBGDXModule {
   public readonly calls: RecordedCall[] = [];
 
   cwrap(name: string): (...args: unknown[]) => unknown {
-    if (name === 'duckdb_gdx_wasm_clear_http_headers') {
+    if (name === 'gdx_wasm_clear_http_headers') {
       return () => {
         this.calls.push({ type: 'clear' });
       };
     }
-    if (name === 'duckdb_gdx_wasm_set_http_header') {
+    if (name === 'gdx_wasm_set_http_header') {
       return (key: unknown, value: unknown) => {
         this.calls.push({ type: 'set', key: String(key), value: String(value) });
       };
@@ -69,16 +69,16 @@ async function run(): Promise<void> {
   const db = new RecordingDatabase();
   await ensureDuckDBGDXLoaded(db);
   assertDeepEqual(db.calls, [
-    'install:duckdb_gdx',
-    'load:duckdb_gdx'
+    'install:gdx',
+    'load:gdx'
   ]);
 
   const module2 = new RecordingModule();
   const db2 = new RecordingDatabase();
   await initializeDuckDBGDX(db2, module2, { 'X-Env': 'ci' });
   assertDeepEqual(db2.calls, [
-    'install:duckdb_gdx',
-    'load:duckdb_gdx'
+    'install:gdx',
+    'load:gdx'
   ]);
   assertEqual(module2.calls.length, 2);
   assertDeepEqual(module2.calls[0], { type: 'clear' } as RecordedCall);

@@ -6,7 +6,7 @@ runtime](https://github.com/GAMS-dev/gdx) and adds a small metadata cache so rep
 ## Quick start
 
 ```sql
-LOAD 'duckdb_gdx';
+LOAD 'gdx';
 PRAGMA gdx_preload('test/data/gdx/transport.gdx', force_reload=true);
 SELECT symbol_name, symbol_type, record_count
 FROM gdx_symbols('test/data/gdx/transport.gdx');
@@ -36,7 +36,7 @@ make test_debug  # runs extension SQL tests and metadata unit tests
 ```
 
 The CI workflow mirrors these commands on Linux, macOS, Windows, and the WASM toolchain. Generated binaries land under
-`build/<config>/extension/duckdb_gdx/`.
+`build/<config>/extension/gdx/`.
 
 ## Documentation
 

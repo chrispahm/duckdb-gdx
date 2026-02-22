@@ -21,17 +21,17 @@ static void LoadInternal(ExtensionLoader &loader) {
 	fprintf(stderr, "[GDX] Registered preload pragma\n");
 }
 
-void DuckdbGdxExtension::Load(ExtensionLoader &loader) {
+void GdxExtension::Load(ExtensionLoader &loader) {
 	LoadInternal(loader);
 }
 
-std::string DuckdbGdxExtension::Name() {
-	return "duckdb_gdx";
+std::string GdxExtension::Name() {
+	return "gdx";
 }
 
-std::string DuckdbGdxExtension::Version() const {
-#ifdef EXT_VERSION_DUCKDB_GDX
-	return EXT_VERSION_DUCKDB_GDX;
+std::string GdxExtension::Version() const {
+#ifdef EXT_VERSION_GDX
+	return EXT_VERSION_GDX;
 #else
 	return "";
 #endif
@@ -41,7 +41,7 @@ std::string DuckdbGdxExtension::Version() const {
 
 extern "C" {
 
-DUCKDB_CPP_EXTENSION_ENTRY(duckdb_gdx, loader) {
+DUCKDB_CPP_EXTENSION_ENTRY(gdx, loader) {
 	duckdb::LoadInternal(loader);
 }
 }

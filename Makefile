@@ -1,7 +1,7 @@
 PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # Configuration of extension
-EXT_NAME=duckdb_gdx
+EXT_NAME=gdx
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
 # Workaround for GCC linker errors with DuckDB on Linux:
@@ -50,9 +50,9 @@ wasm_pre_build_step:
 		python3 "$(EMSDK)/upstream/emscripten/embuilder.py" build zlib; \
 	fi
 
-# Clean cached duckdb_gdx extension files to avoid stale symbol issues
+# Clean cached gdx extension files to avoid stale symbol issues
 wasm_clean_cache:
-	@echo "Cleaning cached duckdb_gdx extensions..."
+	@echo "Cleaning cached gdx extensions..."
 	@rm -rf ~/.duckdb/extensions/ 2>/dev/null || true
 
 # Override wasm_eh to clean cache before building

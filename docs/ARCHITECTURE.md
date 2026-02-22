@@ -48,12 +48,12 @@ One header per source file, plus `gdx_extension.hpp` for the extension class.
 ## Extension loading
 
 ```cpp
-DUCKDB_CPP_EXTENSION_ENTRY(duckdb_gdx, loader) {
+DUCKDB_CPP_EXTENSION_ENTRY(gdx, loader) {
     LoadInternal(loader);  // registers all functions and the pragma
 }
 ```
 
-DuckDB calls this when the extension is loaded via `LOAD duckdb_gdx` or when linked statically.
+DuckDB calls this when the extension is loaded via `LOAD gdx` or when linked statically.
 
 ## Table function lifecycle
 

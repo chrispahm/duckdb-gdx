@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 	}
 
 	int err_nr = 0;
-	if (!gdx_file.gdxOpenWrite(output_path.c_str(), "duckdb_gdx_fixture", err_nr)) {
+	if (!gdx_file.gdxOpenWrite(output_path.c_str(), "gdx_fixture", err_nr)) {
 		std::cerr << "Failed to open GDX file for writing: error " << err_nr << std::endl;
 		return 1;
 	}

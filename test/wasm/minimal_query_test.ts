@@ -51,7 +51,7 @@ server.listen(PORT, async () => {
   const conn = await db.connect();
 
   await conn.query(`SET custom_extension_repository = 'http://localhost:${PORT}'`);
-  await conn.query('LOAD duckdb_gdx');
+  await conn.query('LOAD gdx');
 
   // Register the GDX file
   const gdxPath = '/Users/pahmeyer/Documents/GitHub.nosync/capri-course/model250512114725/dat/fao/FAO_trade_matrix_1986_2021.gdx';

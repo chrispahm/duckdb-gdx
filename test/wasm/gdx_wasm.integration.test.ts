@@ -54,7 +54,7 @@ async function startExtensionServer(): Promise<http.Server> {
     }
     
     // Serve extension files from the repository directory
-    // URL pattern: /v1.3.2/wasm_eh/duckdb_gdx.duckdb_extension.wasm
+    // URL pattern: /v1.3.2/wasm_eh/gdx.duckdb_extension.wasm
     const urlPath = req.url || '';
     console.log(`HTTP request: ${urlPath}`);
     
@@ -156,8 +156,8 @@ async function run(): Promise<void> {
         await connection.query(`SET custom_extension_repository = 'http://localhost:${EXTENSION_SERVER_PORT}'`);
         
         // Load the extension (INSTALL is a no-op in DuckDB-WASM)
-        console.log('Loading duckdb_gdx extension...');
-        await connection.query('LOAD duckdb_gdx');
+        console.log('Loading gdx extension...');
+        await connection.query('LOAD gdx');
         console.log('Extension loaded successfully!');
 
         // Register test GDX file

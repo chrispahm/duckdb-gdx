@@ -18,7 +18,7 @@ jobs:
     with:
       duckdb_version: v1.4.3
       ci_tools_version: v1.4.3
-      extension_name: duckdb_gdx
+      extension_name: gdx
       # linux_arm64: gcc-toolset-14 (GCC 14) on manylinux_2_28_aarch64 compiles
       #   against GCC 14's libstdc++ ABI but links against system GCC 8's libstdc++,
       #   causing undefined references. Upstream Docker image issue.
@@ -33,5 +33,5 @@ jobs:
     with:
       duckdb_version: v1.4.3
       ci_tools_version: v1.4.3
-      extension_name: duckdb_gdx
+      extension_name: gdx
       format_checks: 'format;tidy'

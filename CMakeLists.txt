@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # Set extension name here
-set(TARGET_NAME duckdb_gdx)
+set(TARGET_NAME gdx)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
@@ -27,7 +27,7 @@ if(EMSCRIPTEN AND NOT MINIMAL_WASM_DEBUG)
   # unresolved imports which causes the extension to hang during LOAD.
   # Use generator expression to get the actual library path at build time.
   # Note: zlib is bundled in gdx-static when gdx/zlib source files are present.
-  set(DUCKDB_EXTENSION_DUCKDB_GDX_LINKED_LIBS
+  set(DUCKDB_EXTENSION_GDX_LINKED_LIBS
        "$<TARGET_FILE:gdx-static>")
 endif()
 
@@ -108,12 +108,12 @@ if(NOT MINIMAL_WASM_DEBUG)
 endif()
 
 if(DEFINED ENABLE_UNITTEST_CPP_TESTS AND ENABLE_UNITTEST_CPP_TESTS AND NOT MINIMAL_WASM_DEBUG)
-  set(DUCKDB_GDX_UNITTEST_SOURCES
+  set(GDX_UNITTEST_SOURCES
       test/unit/gdx/test_gdx_symbol_utils.cpp
       test/unit/gdx/test_random_access_adapter.cpp)
 
-  add_library_unity(duckdb_gdx_unittest OBJECT ${DUCKDB_GDX_UNITTEST_SOURCES})
-  target_include_directories(duckdb_gdx_unittest PRIVATE
+  add_library_unity(gdx_unittest OBJECT ${GDX_UNITTEST_SOURCES})
+  target_include_directories(gdx_unittest PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/include
     ${CMAKE_CURRENT_SOURCE_DIR}/gdx/generated
     ${CMAKE_CURRENT_SOURCE_DIR}/gdx/src
@@ -122,6 +122,6 @@ if(DEFINED ENABLE_UNITTEST_CPP_TESTS AND ENABLE_UNITTEST_CPP_TESTS AND NOT MINIM
   )
 
   set(ALL_OBJECT_FILES
-      ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_gdx_unittest>
+      ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:gdx_unittest>
       PARENT_SCOPE)
 endif()

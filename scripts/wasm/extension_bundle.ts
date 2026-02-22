@@ -1,5 +1,5 @@
 /**
- * Helper utilities for bundling the duckdb_gdx extension with duckdb-wasm.
+ * Helper utilities for bundling the gdx extension with duckdb-wasm.
  *
  * The C++ side accepts optional HTTP headers that are appended to every
  * range request performed by the WASM random access backend. The helpers
@@ -22,12 +22,12 @@ export function configureDuckDBGDXHttpHeaders(module: DuckDBGDXModule | null | u
     return;
   }
 
-  const clearHeaders = module.cwrap('duckdb_gdx_wasm_clear_http_headers', null, []);
+  const clearHeaders = module.cwrap('gdx_wasm_clear_http_headers', null, []);
   if (typeof clearHeaders === 'function') {
     clearHeaders();
   }
 
-  const setHeader = module.cwrap('duckdb_gdx_wasm_set_http_header', null, ['string', 'string']);
+  const setHeader = module.cwrap('gdx_wasm_set_http_header', null, ['string', 'string']);
   if (typeof setHeader !== 'function') {
     return;
   }
@@ -46,8 +46,8 @@ export interface DuckDBGDXDatabase {
  * Installs and loads the required extensions for WASM usage.
  */
 export async function ensureDuckDBGDXLoaded(db: DuckDBGDXDatabase): Promise<void> {
-  await db.installExtension('duckdb_gdx', { force: true });
-  await db.loadExtension('duckdb_gdx');
+  await db.installExtension('gdx', { force: true });
+  await db.loadExtension('gdx');
 }
 
 /**

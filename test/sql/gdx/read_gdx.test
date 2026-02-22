@@ -2,7 +2,7 @@
 # description: Smoke-test gdx_symbols and read_gdx on transport sample
 # group: [gdx]
 
-require duckdb_gdx
+require gdx
 
 statement ok
 PRAGMA threads=1;

@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 TRANSPORT_GDX = REPO_ROOT / "test" / "data" / "gdx" / "transport.gdx"
 
 
-EXTENSION_FILENAMES = ("gdx.duckdb_extension", "duckdb_gdx.duckdb_extension")
+EXTENSION_FILENAMES = ("gdx.duckdb_extension",)
 ASAN_MARKERS = (b"libclang_rt.asan", b"__asan_init")
 
 
@@ -119,7 +119,7 @@ def test_transport_gdx_metadata_and_data(duckdb_connection: duckdb.DuckDBPyConne
         """
         SELECT COUNT(*)
         FROM duckdb_extensions()
-        WHERE extension_name IN ('gdx', 'duckdb_gdx') AND loaded
+        WHERE extension_name = 'gdx' AND loaded
         """
     ).fetchone()
     assert loaded_row is not None

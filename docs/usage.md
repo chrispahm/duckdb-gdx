@@ -6,7 +6,7 @@ in the `duckdb::gdx` namespace on the C++ side and are available once the extens
 ## Loading and preloading metadata
 
 ```sql
-LOAD 'duckdb_gdx';
+LOAD 'gdx';
 PRAGMA gdx_preload('s3://bucket/model.gdx', force_reload=true);
 ```
 
