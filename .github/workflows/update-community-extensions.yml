@@ -1,0 +1,70 @@
+# .github/workflows/update-community-extensions.yml
+name: Update Community Extensions
+
+on:
+  workflow_run:
+    workflows: ["Main Extension Distribution Pipeline"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  update-community-extensions:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      contains(github.event.workflow_run.head_commit.message, 'Update DuckDB to')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get commit SHA and check for existing PR
+        id: info
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+          # Check if PR already exists
+          COUNT=$(gh pr list --repo duckdb/community-extensions \
+            --search "Update gdx extension ref to ${SHA}" \
+            --json number --jq length)
+          echo "pr_exists=$([[ $COUNT -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+      - name: Create PR in community-extensions
+        if: steps.info.outputs.pr_exists != 'true'
+        run: |
+          SHA="${{ steps.info.outputs.sha }}"
+          BRANCH="update-gdx-${SHA:0:8}"
+
+          # Clone your fork
+          gh repo fork duckdb/community-extensions --clone=true --default-branch-only 2>/dev/null || true
+          cd community-extensions
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Sync fork with upstream
+          git remote add upstream https://github.com/duckdb/community-extensions.git 2>/dev/null || true
+          git fetch upstream
+          git checkout -B "$BRANCH" upstream/main
+
+          # Update the ref
+          sed -i "s/^    ref: .*/    ref: ${SHA}/" extensions/gdx/description.yml
+
+          git add extensions/gdx/description.yml
+          git commit -m "Update gdx extension ref to ${SHA}"
+
+          FORK_OWNER=$(gh api user --jq .login)
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${FORK_OWNER}/community-extensions.git" "$BRANCH" --force
+
+          gh pr create \
+            --repo duckdb/community-extensions \
+            --base main \
+            --head "${FORK_OWNER}:${BRANCH}" \
+            --title "Update gdx extension ref to ${SHA:0:8}" \
+            --body "Automated update following successful CI against new DuckDB release.
+
+          **Ref:** \`${SHA}\`
+          **Source:** https://github.com/chrispahm/duckdb-gdx/commit/${SHA}"
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
