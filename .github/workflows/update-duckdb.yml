@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  workflows: write
 
 jobs:
   check-and-update:
@@ -35,6 +36,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify ci-tools tag exists
+        id: verify
         if: steps.check.outputs.updated == 'true'
         run: |
           NEW="${{ steps.check.outputs.latest }}"
@@ -46,7 +48,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update version strings
-        if: steps.check.outputs.updated == 'true'
+        if: steps.check.outputs.updated == 'true' && steps.verify.outputs.skip != 'true'
         run: |
           OLD="${{ steps.check.outputs.current }}"
           NEW="${{ steps.check.outputs.latest }}"
@@ -61,7 +63,7 @@ jobs:
           done
 
       - name: Create pull request
-        if: steps.check.outputs.updated == 'true'
+        if: steps.check.outputs.updated == 'true' && steps.verify.outputs.skip != 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           title: "Update DuckDB to ${{ steps.check.outputs.latest }}"
