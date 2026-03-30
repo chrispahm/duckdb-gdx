@@ -9,7 +9,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  workflows: write
 
 jobs:
   check-and-update:
@@ -66,6 +65,7 @@ jobs:
         if: steps.check.outputs.updated == 'true' && steps.verify.outputs.skip != 'true'
         uses: peter-evans/create-pull-request@v7
         with:
+          token: ${{ secrets.PAT_TOKEN }}
           title: "Update DuckDB to ${{ steps.check.outputs.latest }}"
           body: "Automated update of DuckDB version from ${{ steps.check.outputs.current }} to ${{ steps.check.outputs.latest }}."
           branch: "update-duckdb-${{ steps.check.outputs.latest }}"
