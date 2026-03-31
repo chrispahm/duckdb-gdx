@@ -39,7 +39,7 @@ jobs:
         if: steps.check.outputs.updated == 'true'
         run: |
           NEW="${{ steps.check.outputs.latest }}"
-          if ! gh api "repos/duckdb/extension-ci-tools/git/ref/tags/${NEW}" --silent 2>/dev/null; then
+          if ! gh api "repos/duckdb/extension-ci-tools/branches/${NEW}" --silent 2>/dev/null; then
             echo "::warning::extension-ci-tools@${NEW} does not exist yet, skipping update"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
