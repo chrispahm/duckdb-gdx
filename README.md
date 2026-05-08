@@ -1,7 +1,9 @@
 # DuckDB GDX Extension
 
 The DuckDB GDX extension exposes [GAMS](https://gams.com/) Data eXchange (`.gdx`) data sets through DuckDB table functions. It bundles the [native GDX
-runtime](https://github.com/GAMS-dev/gdx) and adds a small metadata cache so repeated scans stay fast across CLI, Python, and WASM clients.
+runtime](https://github.com/GAMS-dev/gdx) and adds a small metadata cache so repeated scans stay fast across CLI, Python, and JS/WASM clients.
+
+Used in the [VSCode GDX extension]([https://github.com/chrispahm/duckdb-gdx](https://github.com/chrispahm/gdx-viewer)) for viewing GDX files.
 
 ## Quick start
 
