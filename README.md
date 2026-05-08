@@ -3,7 +3,7 @@
 The DuckDB GDX extension exposes [GAMS](https://gams.com/) Data eXchange (`.gdx`) data sets through DuckDB table functions. It bundles the [native GDX
 runtime](https://github.com/GAMS-dev/gdx) and adds a small metadata cache so repeated scans stay fast across CLI, Python, and JS/WASM clients.
 
-Used in the [VSCode GDX extension]([https://github.com/chrispahm/duckdb-gdx](https://github.com/chrispahm/gdx-viewer)) for viewing GDX files.
+Used in the [VSCode GDX extension](https://github.com/chrispahm/gdx-viewer) for viewing GDX files.
 
 ## Quick start
 
@@ -46,3 +46,7 @@ The CI workflow mirrors these commands on Linux, macOS, Windows, and the WASM to
 - [`test/sql/gdx/read_gdx.test`](test/sql/gdx/read_gdx.test) — end-to-end regression coverage
 
 For implementation details, see the in-source headers under `src/include/gdx/` and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Examples
+
+Check out the [Observable Notebook](https://observablehq.com/@chrispahm/gdx-dateien-im-browser-lesen) demonstrating how to use the extension to read GDX files in a browser environment.
