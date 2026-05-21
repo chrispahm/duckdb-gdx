@@ -7,7 +7,6 @@ from typing import Generator, Iterable
 import duckdb
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[4]
 TRANSPORT_GDX = REPO_ROOT / "test" / "data" / "gdx" / "transport.gdx"
 
@@ -115,13 +114,11 @@ def duckdb_connection() -> Generator[duckdb.DuckDBPyConnection, None, None]:
 def test_transport_gdx_metadata_and_data(duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     conn = duckdb_connection
 
-    loaded_row = conn.execute(
-        """
+    loaded_row = conn.execute("""
         SELECT COUNT(*)
         FROM duckdb_extensions()
         WHERE extension_name = 'gdx' AND loaded
-        """
-    ).fetchone()
+        """).fetchone()
     assert loaded_row is not None
     assert loaded_row[0] >= 1
 
