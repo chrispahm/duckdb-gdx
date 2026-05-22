@@ -52,17 +52,21 @@ include extension-ci-tools/makefiles/duckdb_extension.Makefile
 # thousands of third-party library files.
 FORMAT_DIRS=src test/sql test/unit test/integration/python/tests
 
+# Use uv if available (manages deps via pyproject.toml), otherwise fall back to
+# python3 directly (CI installs deps via pip3 before calling make format-check).
+FORMAT_CMD=$(if $(shell which uv 2>/dev/null),uv run,python3)
+
 format-check:
-	uv run duckdb/scripts/format.py --all --check --directories $(FORMAT_DIRS)
+	$(FORMAT_CMD) duckdb/scripts/format.py --all --check --directories $(FORMAT_DIRS)
 
 format:
-	uv run duckdb/scripts/format.py --all --fix --noconfirm --directories $(FORMAT_DIRS)
+	$(FORMAT_CMD) duckdb/scripts/format.py --all --fix --noconfirm --directories $(FORMAT_DIRS)
 
 format-fix:
-	uv run duckdb/scripts/format.py --all --fix --noconfirm --directories $(FORMAT_DIRS)
+	$(FORMAT_CMD) duckdb/scripts/format.py --all --fix --noconfirm --directories $(FORMAT_DIRS)
 
 format-main:
-	uv run duckdb/scripts/format.py main --fix --noconfirm --directories $(FORMAT_DIRS)
+	$(FORMAT_CMD) duckdb/scripts/format.py main --fix --noconfirm --directories $(FORMAT_DIRS)
 
 wasm_pre_build_step:
 	@if [ -n "$(EMSDK)" ] && [ ! -f "$(EMSDK)/upstream/emscripten/cache/sysroot/include/zlib.h" ]; then \
