@@ -23,8 +23,8 @@ template <typename FS, typename = void>
 struct has_canonicalize_path : std::false_type {};
 
 template <typename FS>
-struct has_canonicalize_path<FS,
-    std::void_t<decltype(std::declval<FS &>().CanonicalizePath(std::declval<const std::string &>()))>>
+struct has_canonicalize_path<
+    FS, std::void_t<decltype(std::declval<FS &>().CanonicalizePath(std::declval<const std::string &>()))>>
     : std::true_type {};
 
 template <typename FS>
