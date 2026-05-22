@@ -70,7 +70,7 @@ format-main:
 
 wasm_pre_build_step:
 	@if [ -n "$(EMSDK)" ] && [ ! -f "$(EMSDK)/upstream/emscripten/cache/sysroot/include/zlib.h" ]; then \
-		uv run "$(EMSDK)/upstream/emscripten/embuilder.py" build zlib; \
+		$(FORMAT_CMD) "$(EMSDK)/upstream/emscripten/embuilder.py" build zlib; \
 	fi
 
 # Clean cached gdx extension files to avoid stale symbol issues
